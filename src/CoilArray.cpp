@@ -196,15 +196,15 @@ IO::Status CoilArray::DumpSignals (string prefix, bool normalize) {
 						else if (repository->Samples() > 1) dt = repository->TP(i+1) - repository->TP(i  );
 					
 						//definition: Gaussian has std-dev World::instance()->RandNoise at a dwell-time of 0.01 ms
-						//for (int j = 0; j < repository->Compartments(); j++) {
-						(*repository)[i*repository->NProps() + j*3 + 0] += World::instance()->LargestM0*World::instance()->RandNoise*rng->normal()*0.1/sqrt(dt);
-						(*repository)[i*repository->NProps() + j*3 + 1] += World::instance()->LargestM0*World::instance()->RandNoise*rng->normal()*0.1/sqrt(dt);
+						for (int j = 0; j < repository->Compartments(); j++) {
+							(*repository)[i*repository->NProps() + j*3 + 0] += World::instance()->LargestM0*World::instance()->RandNoise*rng->normal()*0.1/sqrt(dt);
+							(*repository)[i*repository->NProps() + j*3 + 1] += World::instance()->LargestM0*World::instance()->RandNoise*rng->normal()*0.1/sqrt(dt);
+						}
 					}
-				}
 
-			}
+				}
 			
-		}
+			}
 
 		stringstream sstr;
 		sstr << setw(2) << setfill('0') << c;
@@ -221,6 +221,7 @@ IO::Status CoilArray::DumpSignals (string prefix, bool normalize) {
 		}
 
 
+		}
 	}
 
 	//REVISE
@@ -346,15 +347,16 @@ IO::Status CoilArray::DumpSignalsISMRMRD (string prefix, bool normalize) {
 
 	}
 
-	// Write acquistions from acqList
-	for(int n = 0; n< acqList.size(); ++n)
+	// Write acquisitions from acqList
+	for(int n = 0; n< acqList.size(); ++n){
 		d.appendAcquisition(acqList[n]);
+	}
 
 
 	Repository* repository = m_coils[0]->GetSignal()->Repo();
-	if(offset != repository->Samples())
+	if(offset != repository->Samples()){
 		cout << "Not all signal samples written to ISMRMRD file. Number of unwritten samples: " << repository->Samples() - offset << endl;
-
+	}
 	std::remove((m_signal_output_dir + m_signal_prefix + prefix + "_tmp.h5").c_str());
 
 	return IO::OK;
