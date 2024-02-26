@@ -75,6 +75,14 @@ public:
      */
     map<string, Coil*>*  getList() {return &m_Clonables;}
 
+#ifdef MODEL_ON_GPU
+   /**
+     * @brief Get the name of the coil type
+     *
+     * @return Coil type name as a string
+     */
+    string GetName (DOMNode* node);
+#endif
 
  protected:
 

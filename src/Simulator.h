@@ -4,7 +4,7 @@
 
 /*
  *  JEMRIS Copyright (C) 
- *                        2006-2023  Tony Stoecker
+ *                        2006-2019  Tony Stoecker
  *                        2007-2018  Kaveh Vahedipour
  *                        2009-2019  Daniel Pflugfelder
  *                                  
@@ -39,8 +39,7 @@
  * @brief The simulator
  */
 
-class Simulator {
-
+class Simulator  {
 
  public:
 
@@ -235,6 +234,7 @@ class Simulator {
 	KSpace<double,4>*        m_kspace;            /**< @brief K-Space                     */
 	string                   m_output_dir;        /**< @brief Output directory            */
 	string                   m_signal_prefix;     /**< @brief Signal prefix               */
+
 
 };
 

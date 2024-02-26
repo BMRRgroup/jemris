@@ -4,7 +4,7 @@
 
 /*
  *  JEMRIS Copyright (C) 
- *                        2006-2023  Tony Stoecker
+ *                        2006-2022  Tony Stoecker
  *                        2007-2018  Kaveh Vahedipour
  *                        2009-2019  Daniel Pflugfelder
  *                                  
@@ -116,6 +116,13 @@ class GradPulse : public Pulse {
      * @see Pulse::GenerateEvents()
      */
     virtual void GenerateEvents(std::vector<Event*> &events);
+
+// #ifdef MODEL_ON_GPU
+//     /**
+//      * @brief Calculate the non-linear gradients for all spins and prepare for transfer to GPU.
+//      */
+//     void SetNonLinGradField_All(double const time);
+// #endif
 
   protected:
     /**

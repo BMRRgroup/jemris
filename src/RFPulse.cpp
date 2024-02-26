@@ -164,6 +164,7 @@ void RFPulse::GetValue (double * dAllVal, double const time)  {
 	double magn  = 1.0;
 	double phase = 0.0;
 
+#ifndef MODEL_ON_GPU
 	if (m_coil_array != NULL) {
 
 		Coil* coil=m_coil_array->GetCoil(m_channel);
@@ -175,7 +176,7 @@ void RFPulse::GetValue (double * dAllVal, double const time)  {
 			cout << GetName() << " warning: my channel" << m_channel << "is not in the TxCoilArray\n";
 
 	}
-
+#endif
 	// Get Magnitude and Phase of this RF pulse
 	magn  *= GetMagnitude(time);
 	phase += GetInitialPhase()*PI/180.0;
@@ -189,7 +190,7 @@ void RFPulse::GetValue (double * dAllVal, double const time)  {
 	//add RFPulse to the B1 field
 	double B1x =  (dAllVal[0]*cos(dAllVal[1]) + magn*cos(phase));
 	double B1y =  (dAllVal[0]*sin(dAllVal[1]) + magn*sin(phase));
-
+	
 	dAllVal[0] = sqrt(pow(B1x,2.0) + pow(B1y,2.0));
 	dAllVal[1] = atan2(B1y,B1x);
 

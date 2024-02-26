@@ -32,8 +32,14 @@
 // from FFTW
 #define PI    3.141592653589793238462643383279502884197169399375105820974944592
 #define TWOPI 6.283185307179586476925286766559005768394338798750211641949889185
-const double TIME_ERR_TOL = 2.5e-6; // Avoid CVODE warnings. Doesn't affect physics.
 
+// AN-2022_v4
+#include <sundials/sundials_types.h>   /* definition of type double */
+#if defined(SUNDIALS_SINGLE_PRECISION)
+const realtype TIME_ERR_TOL = 5e-5; // was 1e-3;   Avoid CVODE warnings. Doesn't affect physics.
+#elif defined(SUNDIALS_DOUBLE_PRECISION)
+const realtype TIME_ERR_TOL = 2.5e-6;
+#endif
 //#define SLAVE_GRADS
 
 /**

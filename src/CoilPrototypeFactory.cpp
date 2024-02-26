@@ -75,3 +75,13 @@ Coil* CoilPrototypeFactory::Clone (string name) {
 
 }
 
+/***********************************************************/
+// AN-2022: to know which type of coil array is used
+#ifdef MODEL_ON_GPU
+string CoilPrototypeFactory::GetName (DOMNode* node) {
+
+	string  name  = XMLString::transcode    (node->getNodeName());
+	return name;
+
+}
+#endif

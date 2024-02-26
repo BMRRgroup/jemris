@@ -37,6 +37,11 @@
 #include "Container.h"
 #include "ContainerSequence.h"
 
+// AN-2022
+#ifdef MODEL_ON_GPU
+#include "cuda_runtime.h"
+#include <sundials/sundials_types.h>   /* definition of type double */
+#endif // AN-2022***
 using namespace std;
 
 //class declarations
@@ -57,7 +62,11 @@ class Model {
 	/**
 	 * @brief Default Destructor
 	 */
-	virtual ~Model() {};
+	virtual ~Model() {	
+#ifdef MODEL_ON_GPU	
+		cudaFree(dM);
+#endif
+	};
 
 	/**
 	 * @brief Prepare for simulations.
@@ -73,24 +82,32 @@ class Model {
  	 *  @brief Set MR sequence.
 	 */
 	inline void SetSequence(ConcatSequence* pConcatSequence){m_concat_sequence  = pConcatSequence;};
-
+	
 	/**
  	 *  @brief Solve differential equations.
 	 */
 	void Solve();
-
+	
+#ifndef MODEL_ON_GPU // AN-2022
 	/**
 	 * @brief Save time evolution to disk.
 	 *
  	 * Static function to write the time-evolution of the magnetisation
  	 * for every spin to binary file.
 	 */
-    static void saveEvolution (long index, bool close_files) ;
+	static void saveEvolution (long index, bool close_files) ;
 
+#else
+	void SolveGPU();
+    static void saveEvolutionGPU (long index, bool close_files, cudaStream_t stream) ;
+#endif
+	// AN-2022***
 
-    void SetDumpProgress(bool val) { m_do_dump_progress = val; };
+	void SetDumpProgress(bool val) { m_do_dump_progress = val; };
 
  protected:
+
+#ifndef MODEL_ON_GPU
 
 	/**
 	 * @brief Initialise solver.
@@ -123,24 +140,47 @@ class Model {
 	 * @param module      The current sequence module to be simulated
 	 */
 	void RunSequenceTree (double& dTimeShift, long& lIndexShift, Module* module);
+	
+#else	// AN-2022
+	virtual bool 	CalculateGPU(double next_tStop, cudaStream_t stream) = 0;
+	virtual void 	InitSolverGPU(cudaStream_t stream, bool alloc_nvector_gpu) = 0;
+	void 			RunSequenceTreeGPU (double& dTimeShift, long& lIndexShift, Module* module);
+	/**
+	 * @brief Free solver.
+	 */
+    virtual void FreeSolverGPU() = 0;
+#endif
+	// AN-2022***
+
+#ifdef MODEL_ON_GPU		// AN-2022
+	realtype* 		dM;  				/** @brief Back-up for the solution on GPU */
+	cudaStream_t*	streams;			/** @brief Non-default streams for asynchorous run on GPU  */
+	int				streamSize[NoOfStreams];			/** @brief If the ensemble split between streams, the size of a chunk */
+#endif // AN-2022***
 
     World*          m_world;	        /**< @brief Simulation world                             */
     CoilArray*      m_rx_coil_array;    /**< @brief Receive coil array                          */
     CoilArray*      m_tx_coil_array;    /**< @brief Transmit coil array                           */
     ConcatSequence* m_concat_sequence;  /**< @brief Top node of the sequence tree for simulation */
     Sample*         m_sample;           /**< @brief Sample                                       */
-    double	        m_accuracy_factor;  /**< @brief increase accuracy by this factor in case of numerical problems */
+    realtype	    m_accuracy_factor;  /**< @brief increase accuracy by this factor in case of numerical problems */
 
     bool            m_do_dump_progress; /**< @brief If true, percentage progress during Solve() is written to .jemris_progress.out */
 
  private:
 
     bool            m_aux; //for debugging
-
+#ifndef MODEL_ON_GPU	// AN-2022
     /**
      * updates process counter file
      */
     void UpdateProcessCounter (const long lSpin);
+#else
+	/**
+     * updates process counter file and progressbar
+     */
+    void UpdateProcessCounterGPU (const long lADC);
+#endif	// AN-2022***
 
     /**
      * dumps restart information(serial jemris.)

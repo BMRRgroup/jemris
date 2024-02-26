@@ -80,7 +80,7 @@ inline void      AtomicSequence::GetValue (double * dAllVal, double const time) 
 
     if (time < 0.0 || time > m_duration) { return ; }
 
-    if (m_non_lin_grad) World::instance()->NonLinGradField = 0.0;
+	if (m_non_lin_grad) World::instance()->InitNonLinGradField();
     vector<Module*> children;
 	children = ( m_eddy ? GetChildrenDynamic() : GetChildren() );
 
@@ -106,11 +106,11 @@ inline void      AtomicSequence::GetValue (double * dAllVal, double const time) 
     		 ((RFPulse*) children[j])->GetCoilArray()!=NULL 		&&	// 2.) it has a coil array
     		 ((RFPulse*) children[j])->GetCoilArray()->GetSize()>1  &&	// 3.) the array has multiple coils
     		 !children[j]->HasDOMattribute("Channel") ) {				// 4.) the RF pulse has no channel explicitly specified
-    		for (unsigned k=0; k<((RFPulse*) children[j])->GetCoilArray()->GetSize(); k++) {
-    			((RFPulse*) children[j])->SetChannel(k);
-    			children[j]->GetValue(dAllVal,pulse_time);
-    		}
-    		((RFPulse*) children[j])->SetChannel(0);
+				for (unsigned k=0; k<((RFPulse*) children[j])->GetCoilArray()->GetSize(); k++) {
+					((RFPulse*) children[j])->SetChannel(k);
+					children[j]->GetValue(dAllVal,pulse_time);
+				}
+			((RFPulse*) children[j])->SetChannel(0);
     		continue;
     	}
 
@@ -378,7 +378,7 @@ void    AtomicSequence::GetValueLingeringEddyCurrents (double * dAllVal, double 
 											+ iter->first->GetLingerTime()
 											- iter->second
 											+ time  );
-    	    continue;
+			continue;
     	}
 
 		double d[MAX_SEQ_VAL+3] = {0.0};	/* Extra two values (time, rx phase) */

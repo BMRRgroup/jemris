@@ -1,5 +1,17 @@
-cmake_minimum_required (VERSION 2.8) 
+# AN-2022: GPU-JEMRIS -----------------------------------------------------------------------
+if (MODEL_ON_GPU)
+  if(NOT DEFINED CMAKE_CUDA_ARCHITECTURES)
+    # AN - tested on 61 and 75
+    set(CMAKE_CUDA_ARCHITECTURES 50 52 53 60 61 62 70 75) # 71 
+  # if earlier CUDA architecture, include: 20 30 35 37 50 52 53 60 61 62 70 71 75
+  endif()
 
+  set (CMAKE_CXX_FLAGS_INIT "-Wno-dev")
+  project (jemris LANGUAGES C CXX CUDA)
+endif()
+### AN-2022
+
+cmake_minimum_required (VERSION 2.8) 
 project (jemris) 
 set (jemris_VERSION_MAJOR 2)
 set (jemris_VERSION_MINOR 9)
@@ -103,7 +115,7 @@ elseif(MPI_C_FOUND)
 endif()
 
 
-find_package(HDF5 COMPONENTS C CXX REQUIRED)
+find_package(HDF5 COMPONENTS C CXX REQUIRED) 
 
 if (NOT DEFINED HDF5_CXX_LIBRARIES)
    MESSAGE(STATUS "HDF5 CXX Libraries not set but library present... using alternative! Probably everything is fine!")
@@ -123,13 +135,13 @@ link_directories(${ISMRMRD_LIBRARY_DIRS})
 include_directories(${ISMRMRD_INCLUDE_DIRS})
 
 # Docker image
-#message( NOTICE "pulling docker image for reconstruction server...")
-#execute_process(COMMAND "docker" "pull" "mavel101/bart-reco-server" RESULT_VARIABLE ret OUTPUT_FILE CMD_OUTPUT)
-#if(ret EQUAL "1")
-    #message( WARNING "Docker image for reconstruction server cannot be pulled. Docker may not be installed.")
-#else()
-    #message( NOTICE "Succesfully pulled Docker image.")
-#endif()
+# message( NOTICE "pulling docker image for reconstruction server...")
+# execute_process(COMMAND "docker" "pull" "mavel101/bart-reco-server" RESULT_VARIABLE ret OUTPUT_FILE CMD_OUTPUT)
+# if(ret EQUAL "1")
+#     message( WARNING "Docker image for reconstruction server cannot be pulled. Docker may not be installed.")
+# else()
+#     message( NOTICE "Succesfully pulled Docker image.")
+# endif()
 
 # Client conda environment
 message( NOTICE "creating conda environment for reconstruction client.")

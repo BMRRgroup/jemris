@@ -36,7 +36,6 @@
 #include "rng.h"
 #include "Declarations.h"
 #include "sys/time.h"
-
 class SampleReorderStrategyInterface;
 class CoilArray;
 
@@ -46,6 +45,11 @@ using std::ofstream;
 using namespace std;
 XERCES_CPP_NAMESPACE_USE
 
+#ifdef MODEL_ON_GPU // AN-2022
+#include <cuda_runtime.h>
+#include <curand.h>
+#include <curand_kernel.h>
+#endif		// AN-2022***
 
 /**
  * @brief Spin ensemble
@@ -408,7 +412,7 @@ class Sample {
      * @param val Output container
      */
     void GetValues                   (const size_t l, double* val) ;
-
+     
     /**
      * @brief Get grid resolution
      *
@@ -540,7 +544,25 @@ class Sample {
 	void    CopyHelper (double* out);
 
 	virtual void CropEnumerate ();
+
+#ifdef MODEL_ON_GPU // AN-2022
+	/**
+     * @brief Pin sample values memory for async transfer on GPU in GetValuesNdeltaB_2GPU,
+	 * 		  sample values are converted to single precision if needed.
+     */
+	void PinEnsembleGPU();
 	
+	/**
+     * @brief Copy sample values to GPU, add position randomness and simulate dB values.
+     */
+	void GetValuesNdeltaB_GPU(realtype* val, realtype* deltaB, realtype* positions, int block,
+		int SpinOffset, int StreamSize, cudaStream_t stream) ;
+
+	/**
+     * @brief Set Time interval in seconds after which new spins are sent (approx. value.)
+     */
+	void UnpinEnsembleGPU();
+#endif	// AN-2022***
 
  protected:
 	void 	MultiplySample(int multiple);  /** clones sample 'multiple'-times, e.g. for diffusion simulation */
@@ -576,6 +598,13 @@ class Sample {
 
 	vector<double>  m_helper;
 	int             m_no_spin_compartments;
+
+// AN-2022
+#ifdef MODEL_ON_GPU
+	realtype* 		sample_arr;
+	curandState_t* 	randStates;
+	realtype*    	d_m_res_posRND;
+#endif	// AN-2022***
 
 };
 

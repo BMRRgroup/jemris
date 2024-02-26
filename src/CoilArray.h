@@ -4,7 +4,7 @@
 
 /*
  *  JEMRIS Copyright (C) 
- *                        2006-2023  Tony Stoecker
+ *                        2006-2022  Tony Stoecker
  *                        2007-2018  Kaveh Vahedipour
  *                        2009-2019  Daniel Pflugfelder
  *                                  
@@ -31,6 +31,11 @@
 
 #include "Signal.h"
 #include "CoilPrototypeFactory.h"
+
+#ifdef MODEL_ON_GPU
+// AN-2022
+#include <cuda_runtime.h>
+#endif
 
 class Coil;
 
@@ -59,7 +64,8 @@ class CoilArray  {
      * @brief Populate coil array
      *        Run over coil array configuration tree and Populate the array
      */
-    unsigned int  Populate ();
+    // AN-2022: added variable defining the coil type
+    unsigned int  Populate (string* coil_name=nullptr);
 
     /**
      * @brief Default destructor
@@ -182,6 +188,43 @@ class CoilArray  {
      * @brief reads restart signal.
      */
     int ReadRestartSignal();
+
+#ifdef MODEL_ON_GPU   
+// AN-2022
+
+    /**
+     * @brief pre-calculate coil sensitivities for all spins, allocate memory on GPU and tranfer the maps
+     */
+    void InitCoilSensGPU (size_t* sample_dims, double* sample_vals, cudaStream_t* streams);
+
+    /**
+     * @brief initialize GPU memory for solution vectors and reduction operator 
+     */
+    void InitSolutionArraysGPU ();
+
+    /**
+     * @brief in case of dynamic effects, allocate extra GPU memory for "dynamic" coil sensitivities
+     */
+    void BufferDynCoils ();
+    
+    /**
+     * @brief receive on all streams async-ly and write signals to repository at once
+                each stream is assigned to a receive channel in multi-channel
+     */
+    void ReceiveGPU (long lADC, int iter_stream, int SpinOffset, 
+        int StreamSize, cudaStream_t* streams);
+
+    /**
+     * @brief write bulk magnetization into signal repository
+     */
+    void WriteSignal (long lADC);
+
+    /**
+     * @brief clean up the GPU memory for solution vectors and reduction operator 
+     */
+    void DestroySolutionArraysGPU ();
+
+#endif
 
  private:
 

@@ -30,7 +30,9 @@
 #include "DynamicVariables.h"
 #include "Trajectory.h"
 #include "MultiPoolSample.h"
+#ifndef MODEL_ON_GPU
 #include "Bloch_McConnell_CV_Model.h"
+#endif
 //MODIF
 #include "World.h"
 //MODIF***
@@ -146,7 +148,16 @@ void Simulator::SetRxCoilArray      (string frxarray) {
 		m_rx_coil_array->SetSignalPrefix(sp);
 
 	m_rx_coil_array->Initialize(frxarray);
+#ifndef MODEL_ON_GPU
 	m_rx_coil_array->Populate();
+#else
+	std::string coil_type;
+	m_rx_coil_array->Populate(&coil_type);
+	if (coil_type == "IdealCoil") 
+		m_world->m_rx_ideal = true;
+	if (coil_type == "EXTERNALCOIL") 
+		m_world->m_rx_external = true;
+#endif
 
 }
 
@@ -159,8 +170,20 @@ void Simulator::SetTxCoilArray      (string ftxarray) {
 	m_tx_coil_array = new CoilArray();
 	m_tx_coil_array ->setMode(1);
 	m_tx_coil_array ->Initialize(ftxarray);
+#ifndef MODEL_ON_GPU
 	m_tx_coil_array ->Populate();
-
+#else
+	std::string coil_type;
+	m_tx_coil_array->Populate(&coil_type);
+	if (coil_type=="IdealCoil") 
+		m_world->m_tx_ideal = true;
+	if (coil_type=="EXTERNALCOIL") 
+		m_world->m_tx_external = true;
+	if (m_tx_coil_array->GetSize() > 1) {
+		printf("Sorry, mulit-channel transmission is not available for GJEMRIS");
+		exit(-1);
+	}
+#endif
 }
 
 /**********************************************************/
@@ -169,11 +192,16 @@ void Simulator::SetModel          (std::string fmodel) {
 	if (fmodel.empty())
 		fmodel = GetAttr(GetElem("model"), "type");
 
-	if (fmodel == "BM_CVODE")
+	if (fmodel == "BM_CVODE") {
+#ifndef MODEL_ON_GPU
 		m_model = new Bloch_McConnell_CV_Model ();
-	else
+#else
+		printf("McConnell model is not available for GJEMRIS");
+		exit(-1);
+#endif
+	} else {
 		m_model = new Bloch_CV_Model ();
-
+	}
 	if (m_sample        != NULL && m_sequence      != NULL &&
 	    m_rx_coil_array != NULL && m_tx_coil_array != NULL &&
 	    m_model         != NULL)
@@ -218,7 +246,10 @@ void Simulator::SetParameter      () {
 
 	// load trajectories for dynamic variables:
 	DynamicVariables *dynVar = DynamicVariables::instance();
-
+#ifdef MODEL_ON_GPU
+		// AN-2022
+	m_world->dynamic = false;
+#endif
 //MODIF
 	string     Flow = GetAttr(GetElem("sample"), "FlowTrajectories");
 	if (!Flow.empty()) {
@@ -228,6 +259,11 @@ void Simulator::SetParameter      () {
             dynVar->m_Flow->FlowLoop(atof(t_loop.c_str()),atol(n_loop.c_str()));
 		dynVar->m_Flow->LoadFile(Flow);//,m_world->TotalSpinNumber);
 		//cout<<m_world->m_myRank<<" CALLED FLOW LOADING"<<endl;
+#ifdef MODEL_ON_GPU
+		// AN-2022
+		m_world->dynamic = true;
+		printf("Sorry, Flow is not implemented in GJEMRIS"); exit(-1);
+#endif
     }
 //MODIF***
 
@@ -235,33 +271,59 @@ void Simulator::SetParameter      () {
     string     Respiration= GetAttr(GetElem("sample"), "RespirationTrajectory");
     if (!Respiration.empty()) {
         dynVar->m_Respiration->LoadFile(Respiration);
+#ifdef MODEL_ON_GPU
+		// AN-2022
+		m_world->dynamic = true;
+		printf("Sorry, Respiration motion trajectory is not implemented in GJEMRIS"); exit(-1);
+#endif
     }
+
 
 //
 
 	string     Motion = GetAttr(GetElem("sample"), "MotionTrajectory");
 	if (!Motion.empty()) {
 		dynVar->m_Motion->LoadFile(Motion);
+#ifdef MODEL_ON_GPU
+		// AN-2022
+		m_world->dynamic = true;
+#endif
 	}
 
 	string     T2prime = GetAttr(GetElem("sample"), "T2primeTrajectory");
 	if (!T2prime.empty()) {
 		dynVar->m_T2prime->LoadFile(T2prime);
+#ifdef MODEL_ON_GPU
+		// AN-2022
+		m_world->dynamic = true;
+#endif
 	}
 
 	string     T1 = GetAttr(GetElem("sample"), "R1Trajectory");
 	if (!T1.empty()) {
 		dynVar->m_R1->LoadFile(T1);
+#ifdef MODEL_ON_GPU
+		// AN-2022
+		m_world->dynamic = true;
+#endif
 	}
 
 	string     T2 = GetAttr(GetElem("sample"), "R2Trajectory");
 	if (!T2.empty()) {
 		dynVar->m_R2->LoadFile(T2);
+#ifdef MODEL_ON_GPU
+		// AN-2022
+		m_world->dynamic = true;
+#endif
 	}
 
 	string     M0 = GetAttr(GetElem("sample"), "M0Trajectory");
 	if (!M0.empty()) {
 		dynVar->m_M0->LoadFile(M0);
+#ifdef MODEL_ON_GPU
+		// AN-2022
+		m_world->dynamic = true;
+#endif
 	}
 
 	string active = GetAttr(GetElem("sample"), "ActiveCircles");
@@ -280,6 +342,10 @@ void Simulator::SetParameter      () {
 	string     diffusion = GetAttr(GetElem("sample"), "Diffusionfile");
 	if (!diffusion.empty()) {
 		dynVar->m_Diffusion->LoadFile(diffusion);
+#ifdef MODEL_ON_GPU
+		m_world->dynamic = true;
+		printf("Sorry, diffusion is not implemented in GJEMRIS"); exit(-1);
+#endif
 	}
 
 }

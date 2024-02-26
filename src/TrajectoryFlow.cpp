@@ -549,8 +549,6 @@ void TrajectoryFlow::GetValueDerived(double time,double *values)   {
 
 }
 
-
-
 /***********************************************************/
 
 int TrajectoryFlow::GetLowerIndex(double t, vector<double> timeArray, int LastHuntIndex) {
@@ -601,3 +599,4 @@ int TrajectoryFlow::GetLowerIndex(double t, vector<double> timeArray, int LastHu
 	return ilo;
 }
 /****************************************************************/
+

@@ -46,6 +46,14 @@ public:
 
 	virtual void LoadFile(string filename) ;
 
+// AN-2022
+#ifdef MODEL_ON_GPU
+	void GetValueDerived_AllSpins(double time);
+private:
+	void GetPosition_Realtype(double time, realtype &trans_x, realtype &trans_y, realtype &trans_z, realtype &rot_x, realtype &rot_y, realtype &rot_z);
+#endif
+// AN-2022***
+
 private:
 	void GetPosition(double time, double &trans_x, double &trans_y, double &trans_z, double &rot_x, double &rot_y, double &rot_z);
 	vector<double> m_trans_x,m_trans_y,m_trans_z;
