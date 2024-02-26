@@ -32,6 +32,11 @@
 #include "SequenceTree.h"
 #include "ConcatSequence.h"
 
+#ifdef MODEL_ON_GPU
+// AN-2022: added CUDA kernels
+#include "TrajectoryKernels.cuh"
+#endif
+
 #define CERR {cout<<"Error in motion trajectory file: "<< filename <<"; exit!"<<endl;exit(-1);}
 #define PX cout<<"x="<<x<<endl;
 
@@ -157,6 +162,10 @@ void TrajectoryMotion::GetValueDerived(double time,double *values){
     // order of transformations: first rotate around x, then y, then z-axis; afterwards translate;
     // rotation around point m_rot_origin
 
+#ifdef MODEL_ON_GPU // AN-2022
+	GetValueDerived_AllSpins(time);
+#else
+
 	double trans_x, trans_y, trans_z;
 	double rot_x, rot_y, rot_z;
 	double cosx, sinx;
@@ -207,5 +216,59 @@ void TrajectoryMotion::GetValueDerived(double time,double *values){
 	values[1] = y + m_rot_origin_y + trans_y;
 	values[2] = z + m_rot_origin_z + trans_z;
 
+#endif // AN-2022
 }
+
+
+#ifdef MODEL_ON_GPU
+/***********************************************************/
+void TrajectoryMotion::GetPosition_Realtype(double time, realtype &trans_x, realtype &trans_y, realtype &trans_z, realtype &rot_x, realtype &rot_y, realtype &rot_z) {
+
+	int ilo = GetLowerIndex(time);
+	double step = m_time[ilo+1] - m_time[ilo];
+	double b = (time - m_time[ilo])/step;
+
+	// linear interpolation:
+	if (btx) {trans_x = realtype(m_trans_x[ilo] + ((m_trans_x[ilo + 1] - m_trans_x[ilo]) * b));} else {trans_x = 0;}
+	if (bty) {trans_y = realtype(m_trans_y[ilo] + ((m_trans_y[ilo + 1] - m_trans_y[ilo]) * b));} else {trans_y = 0;}
+	if (btz) {trans_z = realtype(m_trans_z[ilo] + ((m_trans_z[ilo + 1] - m_trans_z[ilo]) * b));} else {trans_z = 0;}
+
+	if (brx) {rot_x = realtype(m_rot_x[ilo] + ((m_rot_x[ilo + 1] - m_rot_x[ilo]) * b));} else {rot_x = 0;}
+	if (bry) {rot_y = realtype(m_rot_y[ilo] + ((m_rot_y[ilo + 1] - m_rot_y[ilo]) * b));} else {rot_y = 0;}
+	if (brz) {rot_z = realtype(m_rot_z[ilo] + ((m_rot_z[ilo + 1] - m_rot_z[ilo]) * b));} else {rot_z = 0;}
+
+}
+
+
+/***********************************************************/
+void TrajectoryMotion::GetValueDerived_AllSpins(double time){
+    // order of transformations: first rotate around x, then y, then z-axis; afterwards translate;
+    // rotation around point m_rot_origin
+
+	realtype trans_x, trans_y, trans_z;
+	realtype rot_x, rot_y, rot_z;
+	realtype cosx, sinx, cosy, siny, cosz, sinz;
+	// printf("Next timepoint of Positions change = %f\n", time);
+	GetPosition_Realtype(time, trans_x,trans_y,trans_z,rot_x,rot_y,rot_z);
+
+	if (rot_x != 0) {
+		cosx = cos(rot_x);
+		sinx = sin(rot_x);
+	}
+	if (rot_y != 0) {
+		cosy = cos(rot_y);
+		siny = sin(rot_y);
+	}
+	if (rot_z != 0) {
+		cosz = cos(rot_z);
+		sinz = sin(rot_z);
+	}
+
+	Call_ChangePosKernel (trans_x, trans_y, trans_z, rot_x, rot_y, rot_z, cosx, sinx, cosy, siny, cosz, sinz, 
+			(realtype)m_rot_origin_x, (realtype)m_rot_origin_y, (realtype)m_rot_origin_z);
+	
+}
+#endif
+
+
 

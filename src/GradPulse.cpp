@@ -93,6 +93,14 @@ bool GradPulse::PrepareNLGfield  (PrepareMode mode) {
 		m_non_lin_grad = GetAttribute("NLG_field")->SetMember(val, m_obs_attribs, m_obs_attrib_keyword, mode == PREP_VERBOSE);
 		//mark the parent AtomicSequence of this gradient as nonlinear
 		if (GetParent() != NULL ) ((AtomicSequence*) GetParent())->SetNonLinGrad(m_non_lin_grad);
+
+// AN-2022
+#ifdef MODEL_ON_GPU 
+		if (m_non_lin_grad) {
+			World::instance()->has_nonLinGrad = true;
+		}
+#endif	// AN-2022***
+
 	}
 
 	//test GiNaC evaluation of the Shape expression
@@ -263,12 +271,23 @@ void GradPulse::SetNonLinGradField(double const time){
 
 	if (m_hide) { return ; }
 
+#ifndef MODEL_ON_GPU // AN-2022
 	//evaluate NLG field and add it to the World
 	World::instance()->NonLinGradField += GetAttribute("NLG_field")->EvalCompiledNLGExpression
 			( World::instance()->Values[0], World::instance()->Values[1], World::instance()->Values[2], GetGradient(time) );
+#else
+	// AN-2022: nonLinGrads differ between the spins - calculate maps
+	// note: pW->nonLinGradField_GPU exists only if HasNonLinGrad() was true for some AtomicSeq in the tree
+	World* pW = World::instance();
+	// evaluate NLG field and add it to the map in World 
+	// realtype position[3];
+    for (int lspin=0; lspin<pW->TotalSpinNumber; lspin++){
+		cudaMemcpyAsync(pW->position_buff, &(pW->SpinPositions[3*lspin]), 3*sizeof(realtype), cudaMemcpyDeviceToHost, pW->currStream);
+		pW->NonLinGradField[lspin] += (realtype)GetAttribute("NLG_field")->EvalCompiledNLGExpression
+				( (double)pW->position_buff[0], (double)pW->position_buff[1], (double)pW->position_buff[2], GetGradient(time) );
+	}
+#endif
 	return;
-
-
 }
 /***********************************************************/
 void GradPulse::SetArea (double val) {

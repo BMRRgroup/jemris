@@ -37,6 +37,12 @@
 #include <vector>
 #include     <map>
 
+// AN-2022: define the World class on GPU
+#ifdef MODEL_ON_GPU
+#include <cuda_runtime.h>
+#include <cvode/cvode.h>
+#endif
+// AN-2022***
 
 using namespace std;
 
@@ -47,6 +53,26 @@ class SequenceTree;
 class EddyPulse;
 
 //! Singleton with information about the simulation of the current spin
+
+// AN-2022
+#ifdef MODEL_ON_GPU 
+    /**
+     * @brief convert the double array into a single array
+     */
+realtype* double2floatArray(double* arr, unsigned n);
+
+    /**
+     * @brief global params for all GPU kernels
+     */
+static const int NoOfStreams = 5; // fixed number of streams to use
+static const int block = 512; // threads per block
+
+    /**
+     * @brief CUDA error checking fucntion
+     */
+void gpuAssert(cudaError_t code, const char *file, const int line, bool abort=true);
+#define gpuErrchk(ans) gpuAssert((ans), __FILE__, __LINE__);
+#endif  // AN-2022***
 
 class World {
 
@@ -153,27 +179,66 @@ class World {
      */
     void      (*saveEvolFunPtr)(long l, bool b)  ;
 
+// AN-2022
+#ifdef MODEL_ON_GPU
+    void InitNonLinGradField (); 
+    /**
+	 * @brief Pointer to the evolution saving function for GPU computations
+	 */
+    void      (*saveEvolFunPtrGPU) (long index, bool close_files, cudaStream_t stream)  ;
+    
+    /**
+	 * @brief Host memory allocation for the evolution saving function for GPU computations
+	 */
+    void BufferSaveEvolutionGPU ();
+#endif // AN-2022***
+
     void*             solverSettings ;      /**< @brief Arbitrary solver settings  */
     bool              solverSuccess;	    /**< @brief true, if last calculation successful */
 
 	void*             auxiliary;           /**< @brief Auxiliary data any kind of container needed for static methods can go here */
 
-	//members for solution of a particular spin
-    long              SpinNumber;		    /**< @brief Number of the current spin*/
+    //members for solution of spins
     long              TotalSpinNumber;      /**< @brief Total number of spins*/
     long              TotalADCNumber;       /**< @brief Total number of spins*/
-
-    double*           Values;               /**< @brief Values of the current spin (position and physical parameters) */
     double            time;                 /**< @brief Current time point (in atom) */
     double            total_time;           /**< @brief Current time point (absolut time) */
     double            phase;                /**< @brief Receiver phase taken from the TPOIs*/
     double            PhaseLock;            /**< @brief Locked Phase (the phase set by the last RF pulse)*/
-    double            deltaB;               /**< @brief Any off-resonance terms*/
-    std::vector<double> solution;           /**< @brief Solution [M_r, phi, M_z] at the current time point*/
     double            LargestM0;            /**< @brief largest equilibrium magnetization for noise scaling*/
     double            RandNoise;            /**< @brief percentage of random noise added to the signal */
     double            GMAXoverB0;           /**< @brief Constant for the concomitant field term */
+
+#ifndef MODEL_ON_GPU // AN-2022
+	// members for a particular spin
+    long              SpinNumber;		    /**< @brief Number of the current spin*/
+    double*           Values;               /**< @brief Values of the current spin (position and physical parameters) */
+    double            deltaB;               /**< @brief Any off-resonance terms*/
+    std::vector<double> solution;           /**< @brief Solution [M_r, phi, M_z] at the current time point*/
     double            NonLinGradField;      /**< @brief Non-linear contribution to B_z from gradients */
+#else
+	// members for the GPU model - all spins info
+    // long              CurrentADCNumber;                 
+    realtype*         Values;               /**< @brief Values of all spins (position and physical parameters) */
+    realtype*         SpinPositions;
+    realtype*         deltaB;               /**< @brief Any off-resonance terms*/
+    realtype*         solution;             /**< @brief Solution [M_r, phi, M_z] at the current time point*/
+    realtype*         m_tx_coils_sum;       /**< @brief if pTx - save the sum of sensitivities*/
+    bool              m_tx_ideal;           /**< @brief if transmit coils are ideal*/
+    bool              m_rx_ideal;           /**< @brief if receive coils are ideal */
+    bool              m_rx_external;        /**< @brief if receive coils are external */
+    bool              m_tx_external;        /**< @brief if transmit coils are external */
+    cudaStream_t      currStream;
+    realtype*         d_SeqVal_GPU;         /**< @brief GPU memory buffer for sequence values at the current timepoint */
+    realtype*		  h_solution;           /**< @brief host memory for the solution, for the saveEvolFun */
+    realtype*		  h_values;             /**< @brief host memory for the spin values, for the saveEvolFun */
+    bool              dynamic;              /**< if any dynamic trajectory is defined */
+    realtype          position_buff[3];     /**< @brief for iterating over positions */
+    // Couldn't check the nonLinGrads implementation
+    realtype*         NonLinGradField;      /**< @brief Map of non-linear contributions to B_z from gradients */
+    realtype*         NonLinGradField_GPU;  /**< @brief Map of non-linear contributions to B_z from gradients */
+    bool              has_nonLinGrad;       /**< @brief Are there non-linear contributions to B_z from gradients */
+#endif  // AN-2022***
 
     //members for the current sequence
     SequenceTree*     pSeqTree;             /**< @brief The main sequence tree*/
@@ -184,7 +249,7 @@ class World {
     int	              saveEvolStepSize;     /**< @brief Step-size (in numbers of ADC) at which the evolution is stored */
     string            saveEvolFileName;     /**< @brief Filename in which the evolution is stored */
     ofstream*         saveEvolOfstream;     /**< @brief Output stream for saving the evolutions */
-
+    // AN-2022: excluding these was painful, just let them be
     int 			  m_myRank;				/**< @brief MPI rank of this process. if m_myRank<0 process is serial jemris */
     bool			  m_useLoadBalancing;	/**< @brief use load balancing (send sample in small packages top slaves) */
     int				  m_no_processes;		/**< @brief number of parallel processes; used by load balancing */

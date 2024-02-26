@@ -58,7 +58,7 @@ CoilArray::~CoilArray() {
 }
 
 /***********************************************************/
-unsigned int CoilArray::Populate () {
+unsigned int CoilArray::Populate (string* coil_name/*=nullptr*/) {
 
 	DOMNode* topnode;
 
@@ -69,6 +69,11 @@ unsigned int CoilArray::Populate () {
 		return EMPTY_DOCUMENT;
 
 	RunTree(topnode, this, &CoilArray::CreateCoil);
+
+#ifdef MODEL_ON_GPU
+	// AN-2022: empirically found how to extract coil name
+	*coil_name = this->m_cpf->GetName(topnode->getFirstChild()->getNextSibling());
+#endif
 
 	//Prepare(PREP_INIT);
 	Prepare(PREP_VERBOSE);
@@ -176,12 +181,11 @@ IO::Status CoilArray::DumpSignals (string prefix, bool normalize) {
 
 		if (normalize) {
 				
+			for (int j = 0; j < repository->NProps(); j++) {
 
 				for (long i = 0; i < repository->Samples(); i++) {	
 
-					for (int j = 0; j < repository->NProps(); j++) 
-						(*repository)[i*repository->NProps() + j] /= World::instance()->TotalSpinNumber;
-					
+					(*repository)[i*repository->NProps() + j] /= World::instance()->TotalSpinNumber;
 				
 					//dwelltime-weighted random noise
 					if (World::instance()->RandNoise > 0.0) {
@@ -192,7 +196,7 @@ IO::Status CoilArray::DumpSignals (string prefix, bool normalize) {
 						else if (repository->Samples() > 1) dt = repository->TP(i+1) - repository->TP(i  );
 					
 						//definition: Gaussian has std-dev World::instance()->RandNoise at a dwell-time of 0.01 ms
-						for (int j = 0; j < repository->Compartments(); j++) {
+						//for (int j = 0; j < repository->Compartments(); j++) {
 						(*repository)[i*repository->NProps() + j*3 + 0] += World::instance()->LargestM0*World::instance()->RandNoise*rng->normal()*0.1/sqrt(dt);
 						(*repository)[i*repository->NProps() + j*3 + 1] += World::instance()->LargestM0*World::instance()->RandNoise*rng->normal()*0.1/sqrt(dt);
 					}
@@ -342,7 +346,7 @@ IO::Status CoilArray::DumpSignalsISMRMRD (string prefix, bool normalize) {
 
 	}
 
-	// Write acquisitions from acqList
+	// Write acquistions from acqList
 	for(int n = 0; n< acqList.size(); ++n)
 		d.appendAcquisition(acqList[n]);
 
@@ -431,3 +435,82 @@ int CoilArray::ReadRestartSignal(){
 		}*/
 	return (0);
 }
+
+#ifdef MODEL_ON_GPU
+
+/**********************************************************/
+// AN-2022: receive spins on all streams asynchroniously and write the signals at once from all streams
+void CoilArray::ReceiveGPU (long lADC, int iter_stream, int SpinOffset, 
+	int StreamSize, cudaStream_t* streams) {
+
+	int ch;
+	for (int i=0; i<(GetSize()/NoOfStreams+1); i++) {
+		for (int istream=0; istream<NoOfStreams; istream++) {
+			ch = i * NoOfStreams + istream;
+			if ( ch < GetSize() ) {
+				m_coils[ch]->ReceiveGPU (lADC, streams[istream]);
+			} else {
+				ch--;
+				break;
+			}		
+		}
+	}
+	cudaStreamSynchronize(streams[(ch) % NoOfStreams]);
+	gpuErrchk(cudaGetLastError());
+
+	for (int i=0; i<(GetSize()/NoOfStreams+1); i++) {
+		for (int istream=0; istream<NoOfStreams; istream++) {
+			ch = i * NoOfStreams + istream;
+			if ( ch < GetSize() ) {
+				m_coils[ch]->WriteSignal(lADC);
+			} else {
+				break;
+			}	
+		}
+	}	
+
+}
+
+/**********************************************************/
+// AN-2022: helpers to propagate the action to all coil channels
+void CoilArray::InitSolutionArraysGPU () {
+	for (int i=0; i<GetSize(); i++)
+		m_coils[i]->InitSolutionArraysGPU();
+	gpuErrchk(cudaGetLastError());
+}
+
+void CoilArray::DestroySolutionArraysGPU () {
+	for (int i=0; i<GetSize(); i++)
+		m_coils[i]->DestroySolutionArraysGPU();
+}
+
+void CoilArray::BufferDynCoils () {
+	for (int i=0; i<GetSize(); i++)
+		m_coils[i]->BufferDynCoils ();
+	gpuErrchk(cudaGetLastError());
+}
+
+void CoilArray::WriteSignal (long lADC) {
+	for (int i=0; i<GetSize(); i++) 
+		m_coils[i]->WriteSignal(lADC);
+}
+
+void CoilArray::InitCoilSensGPU (size_t* sample_dims, double* sample_values, cudaStream_t* streams) {
+
+	int ch;
+	for (int i=0; i<(GetSize()/NoOfStreams+1); i++) {
+		for (int istream=0; istream<NoOfStreams; istream++) {
+			ch = i * NoOfStreams + istream;
+			if ( ch < GetSize() ) {
+				// async-ion is a bit useful for m_interpolate=1
+				m_coils[i]->InitCoilSensGPU(sample_dims, sample_values, streams[i]);
+			} else {
+				ch--;
+				break;
+			}		
+		}
+	}
+	gpuErrchk(cudaGetLastError());
+			
+}
+#endif

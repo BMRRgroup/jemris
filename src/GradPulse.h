@@ -117,6 +117,13 @@ class GradPulse : public Pulse {
      */
     virtual void GenerateEvents(std::vector<Event*> &events);
 
+// #ifdef MODEL_ON_GPU
+//     /**
+//      * @brief Calculate the non-linear gradients for all spins and prepare for transfer to GPU.
+//      */
+//     void SetNonLinGradField_All(double const time);
+// #endif
+
   protected:
     /**
      * Get informations on this Gradient

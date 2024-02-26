@@ -77,6 +77,12 @@ void do_simu (Simulator* sim) {
 	cout << "TxArray  : " << sim->GetAttr(sim->GetElem("TXcoilarray"), "uri") << endl;
 	cout << "RxArray  : " << sim->GetAttr(sim->GetElem("RXcoilarray"), "uri") << endl;
 	cout << "Sequence : " << sim->GetAttr(sim->GetElem("sequence"),"uri")<< endl;
+	// AN-2022
+	if (sizeof(realtype) == 4) {
+		cout << "GPU Computation in single-precisioin floats " << endl;
+	} else if (sizeof(realtype) == 8) {
+		cout << "GPU Computation in double-precisioin floats " << endl;
+	}
 	cout << endl;
 	sim->Simulate();
 	cout << endl;

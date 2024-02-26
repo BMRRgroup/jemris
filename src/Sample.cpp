@@ -1,6 +1,6 @@
 /** @file Sample.cpp
  *  @brief Implementation of JEMRIS Sample
- */
+*/
 
 /*
  *  JEMRIS Copyright (C) 
@@ -153,7 +153,7 @@ Sample::Sample (const string& fname, const int multiple) {
 
 /**********************************************************/
 IO::Status Sample::Populate (const string& fname) {
-
+	
 	m_index.resize(3);
 
 	// Binary interface
@@ -321,6 +321,7 @@ size_t  Sample::GetSize   ()     const  {
 	return m_ensemble.NSpins();
 }
 
+#ifndef MODEL_ON_GPU
 /**********************************************************/
 void Sample::GetValues (const size_t l, double* val) {
 
@@ -346,6 +347,7 @@ double  Sample::GetDeltaB (size_t pos) {
 	return ( 0.001*World::instance()->Values[DB] + tan(PI*(m_rng.uniform()-.5))*r2prime );
 
 }
+#endif
 
 /**********************************************************/
 void  Sample::ReorderSample() {
@@ -619,3 +621,109 @@ void Sample::CopyHelper (double* out) {
 		memcpy (out, &m_helper[0], GetHelperSize() * sizeof(double));
 	
 }
+
+// AN-2022
+#ifdef MODEL_ON_GPU
+/**********************************************************/
+// initialize random states vector of size streamsize = N spins on a stream
+__global__ void InitRNG(curandState *state) {
+    int idx = threadIdx.x + blockIdx.x * blockDim.x;
+    curand_init((unsigned long)clock(), idx, 0, &state[idx]);
+}
+
+/**********************************************************/
+// pin the memory of sample values for Async copy to GPU
+void Sample::PinEnsembleGPU() {
+
+	// convert res and pos_rnd to realtype
+	realtype* m_res_rt = new realtype[3];
+	realtype m_pos_rand_rt;
+	// convert sample property values to realtype
+#if defined(SUNDIALS_SINGLE_PRECISION) 
+	sample_arr = double2floatArray(&m_ensemble[0], m_ensemble.NSpins()*m_ensemble.NProps());
+	m_pos_rand_rt = (realtype)m_pos_rand_perc;
+	m_res_rt = double2floatArray(&m_res[0], 3);
+#elif defined(SUNDIALS_DOUBLE_PRECISION) 
+	sample_arr = new double[m_ensemble.NSpins()*m_ensemble.NProps()];
+	sample_arr = &m_ensemble[0];
+	m_pos_rand_rt = m_pos_rand_perc;
+	m_res_rt = &m_res[0];
+#endif
+	// register the sample property values to allow asyncMemcpy
+	gpuErrchk( cudaHostRegister(&sample_arr[0], m_ensemble.NSpins()*m_ensemble.NProps()*sizeof(realtype),cudaHostRegisterDefault)); 
+
+	// copy res and pos_rnd to GPU 
+	gpuErrchk( cudaMalloc((void**)&(d_m_res_posRND), 4*sizeof(realtype)) ); 
+	for (int i=0; i<3; i++) {
+		gpuErrchk( cudaMemcpy( &(d_m_res_posRND[i]), &(m_res_rt[i]), 1*sizeof(realtype), cudaMemcpyHostToDevice) );
+	}
+	gpuErrchk( cudaMemcpy( &(d_m_res_posRND[3]), &(m_pos_rand_rt), 1*sizeof(realtype), cudaMemcpyHostToDevice) );
+}
+
+/**********************************************************/
+// GPU kernel to add spin position randomness and randommness to the deltaB values if R2s!=R2
+__global__ void AddPosRandomGetDeltaBKernel (realtype* val, realtype* dB_all, realtype* positions, 
+	int NoOfCompartments, int NoOfSpinProps, 
+	realtype* d_m_res, int SpinOffset, int N_spins_stream, curandState_t* st){ 
+
+	int tid = blockIdx.x * blockDim.x + threadIdx.x;
+	int spin_idx = SpinOffset + tid;
+	if (tid < N_spins_stream)	{ 
+#if defined(SUNDIALS_SINGLE_PRECISION) 
+		val[spin_idx*NoOfSpinProps+XC] += curand_normal(&st[tid]) * d_m_res[XC] * d_m_res[3] / 100.0;		
+		val[spin_idx*NoOfSpinProps+YC] += curand_normal(&st[tid]) * d_m_res[YC] * d_m_res[3] / 100.0;
+		val[spin_idx*NoOfSpinProps+ZC] += curand_normal(&st[tid]) * d_m_res[ZC] * d_m_res[3] / 100.0;
+#elif defined(SUNDIALS_DOUBLE_PRECISION) 
+		val[spin_idx*NoOfSpinProps+XC] += curand_normal_double(&st[tid]) * d_m_res[XC] * d_m_res[3] / 100.0;		
+		val[spin_idx*NoOfSpinProps+YC] += curand_normal_double(&st[tid]) * d_m_res[YC] * d_m_res[3] / 100.0;
+		val[spin_idx*NoOfSpinProps+ZC] += curand_normal_double(&st[tid]) * d_m_res[ZC] * d_m_res[3] / 100.0;
+#endif
+		// extract spin positions to the separate array
+		positions[3*spin_idx+0] = val[spin_idx*NoOfSpinProps+XC];
+		positions[3*spin_idx+1] = val[spin_idx*NoOfSpinProps+YC];
+		positions[3*spin_idx+2] = val[spin_idx*NoOfSpinProps+ZC];
+		
+		realtype r2s = val[spin_idx*NoOfSpinProps+R2S];
+		realtype r2 = val[spin_idx*NoOfSpinProps+R2];
+		realtype r2prime = ((r2s > r2) ? (r2s - r2) : 0.0);
+		// 0.001 is bcs we compute in ms, but the value is in secs 
+		dB_all[spin_idx] = (0.001*(val[spin_idx*NoOfSpinProps+DB])) + tan(PI*(curand_uniform_double(&st[tid])-.5)) * r2prime;
+
+	}
+}
+
+/**********************************************************/
+// copy sample values to GPU and get delatB
+void Sample::GetValuesNdeltaB_GPU(realtype* val, realtype* deltaB, realtype* positions, int block, 
+		int SpinOffset, int StreamSize, cudaStream_t stream) {
+
+	// init rng for all threads of one stream and use for other streams
+	if (SpinOffset==0) {
+		gpuErrchk( cudaMalloc((void**)&randStates, StreamSize*sizeof(curandState_t)) );
+		InitRNG <<< (StreamSize+block-1)/block, block, 0, stream >>> (randStates); 
+	}
+
+	// async copy of the sample values to GPU
+	cudaMemcpyAsync(&val[(SpinOffset*m_ensemble.NProps())], &sample_arr[(SpinOffset*m_ensemble.NProps())], 
+				StreamSize*m_ensemble.NProps()*sizeof(realtype), 
+				cudaMemcpyHostToDevice, stream);
+
+	// add position randomness
+	// get spin positions 
+	// simulate dB values
+	AddPosRandomGetDeltaBKernel <<< (StreamSize+block-1)/block, block, 0, stream >>> (val, deltaB, positions,
+		m_no_spin_compartments, m_ensemble.NProps(), d_m_res_posRND, SpinOffset, StreamSize, randStates);
+	gpuErrchk(cudaGetLastError());
+}
+
+/**********************************************************/
+// deregistered the pinned sample values memory
+// clean up the not needed variables
+void Sample::UnpinEnsembleGPU() {
+
+	gpuErrchk(cudaHostUnregister((void*)&sample_arr[0]));
+	delete[] sample_arr;
+	cudaFree(d_m_res_posRND);	
+	cudaFree(randStates);
+}
+#endif	// AN-2022***

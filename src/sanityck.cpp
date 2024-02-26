@@ -38,6 +38,10 @@
 #define DEFAULT_TOLERANCE_SIG_COMPARE_PPM  10.0
 #define DEFAULT_TOLERANCE_SEN_COMPARE_PPM   5.0
 
+#ifdef MODEL_ON_GPU // AN-2022
+#include <cuda_runtime.h>
+#endif
+
 using namespace std;
 
 /****************************************************/
@@ -51,6 +55,13 @@ void usage()
 	cout << "  sanityck <path_to_example_data> 3 : creates sensitivity maps" << endl;
 	cout << "  sanityck <path_to_example_data> 4 : exports some sequences in pulseq format for scanner execution" << endl
 		 << endl;
+#ifdef MODEL_ON_GPU
+	// GPU-JEMRIS tests
+	cout   << "  sanityck <path_to_example_data> 6 : performs GPU simulations of some sequences, \n and compares the results to the CPU pre-computed data " << endl << endl;
+		// possible only in double precision, and if ctest was run on CPU
+	cout   << "  sanityck <path_to_example_data> 7 : if ctest was launched for jemris build, \n performs GPU simulations of some sequences, \n and compares the results to the CPU simulations " << endl << endl;
+#endif
+
 }
 
 /****************************************************/
@@ -306,6 +317,150 @@ bool CheckSigs(string path, vector<string> seq, double tolerance_in_percent)
 	return status;
 }
 
+#ifdef MODEL_ON_GPU
+// signal checking funcitons for GPU (analogous to the CPU version )
+/****************************************************/
+bool CheckSigs_onGPU(string path, vector<string> seq){
+
+	bool status=true;
+
+	cout << endl << "Test directory: " << path << endl;
+
+	cout << endl << "Test Case 5: simulating MR signals on GPU " << endl;
+#ifdef SUNDIALS_SINGLE_PRECISION
+	cout << endl << "SINGLE precision " << endl;
+#elif defined(SUNDIALS_DOUBLE_PRECISION)
+	cout << endl << "DOUBLE precision " << endl;
+#endif
+	cout << "========================================"<< endl << endl;
+
+
+	for (unsigned int i=0;i<seq.size();i++) {
+		Simulator sim(  path+"/approved/simu.xml",path+"/approved/sample.h5",
+			            path+"/approved/uniform.xml",path+"/approved/uniform.xml",
+			            path+seq[0],"CVODE");
+
+		if (!sim.GetStatus()) {
+			cout << "can not initialize Simulator. exit.\n";
+			return false;
+		}
+		printf("%02d. %18s | ",i+1,seq[i].c_str());
+
+		sim.SetSequence(path+seq[i]);
+		string binfile = seq[i];
+		string binfile_GPU;
+		binfile.replace(binfile.find(".xml",0),4,"");
+#ifdef SUNDIALS_SINGLE_PRECISION
+		binfile_GPU = binfile+"_SP_GPUsignal";
+		double threshold_error = 2.0; // %
+#elif defined(SUNDIALS_DOUBLE_PRECISION)
+		binfile_GPU = binfile+"_DP_GPUsignal";
+		double threshold_error = 0.1;
+#endif 
+		binfile += "_signal";
+		sim.GetRxCoilArray()->SetSignalPrefix(path+binfile_GPU);
+		sim.GetModel()->SetDumpProgress(false);
+		sim.Simulate();
+
+		printf("%20s (sig-simu) ",binfile_GPU.c_str());
+
+		double d = compare_hdf5_fields(path+binfile_GPU+".h5",path+"approved/"+binfile+".h5","/signal/times") ;
+
+		if ( d < 0.0 ) {
+			status = false;
+			cout << "is NOT ok (#ADCs differs!)" << endl;
+		} else {
+			d += compare_hdf5_fields(path+binfile_GPU+".h5",path+"approved/"+binfile+".h5","/signal/channels/00") ;
+			if (d > threshold_error ) {
+				status = false;
+				printf("is NOT ok (e=%7.4f %%) \n",d);
+			} else
+				printf("is ok (e=%7.4f %%) \n",d);
+		}
+	}
+	return status;
+
+}
+
+/****************************************************/
+bool CheckSigs_GPUvsCPU(string path, vector<string> seq){
+
+	bool status=true;
+
+	cout << endl << "Test directory: " << path << endl;
+	cout << endl << "Test Case 6: simulating MR signals on GPU" << endl;
+	cout << "========================================"<< endl << endl;
+
+
+	for (unsigned int i=0;i<seq.size();i++) {
+
+		Simulator sim(  path+"/approved/simu.xml",path+"/approved/sample.h5",
+			            path+"/approved/uniform.xml",path+"/approved/uniform.xml",
+			            path+seq[0],"CVODE");
+
+		if (!sim.GetStatus()) {
+			cout << "can not initialize Simulator. exit.\n";
+			return false;
+		}
+		printf("%02d. %18s | ",i+1,seq[i].c_str());
+
+		sim.SetSequence(path+seq[i]);
+		string binfile = seq[i];
+		binfile.replace(binfile.find(".xml",0),4,"");
+		string binfile_GPU = binfile;
+		binfile_GPU = binfile+"_GPUsignal";
+		binfile += "_signal";
+		sim.GetRxCoilArray()->SetSignalPrefix(path+binfile_GPU);
+		sim.GetModel()->SetDumpProgress(false);
+		sim.Simulate();
+
+		printf("%25s compared to %25s ",binfile_GPU.c_str(),binfile.c_str());
+
+		double d = compare_hdf5_fields(path+binfile_GPU+".h5",path+binfile+".h5","/signal/times") ;
+
+		if ( d < 0.0 ) {
+			status = false;
+			cout << "is NOT ok (#ADCs differs!)" << endl;
+		} else {
+			d += compare_hdf5_fields(path+binfile_GPU+".h5",path+binfile+".h5","/signal/channels/00") ;
+			if (d > 0.1 ) {
+				status = false;
+				printf("is NOT ok (e=%7.4f %%) \n",d);
+			} else
+				printf("is ok (e=%7.4f %%) \n",d);
+		}
+	}
+	return status;
+
+}
+
+void PrintDevices() {
+	
+	int nDevices;
+	gpuErrchk(cudaGetDeviceCount(&nDevices)); // returns cudaErrorNoDevice if no devices
+	
+	for (int i = 0; i < nDevices; i++) {
+		cudaDeviceProp prop;
+		gpuErrchk(cudaGetDeviceProperties(&prop, i));
+		printf("Device Number: %d\n", i);
+		printf("  Device name: %s\n", prop.name);
+		printf("  Memory Clock Rate (KHz): %d\n",
+			prop.memoryClockRate);
+		printf("  Memory Bus Width (bits): %d\n",
+			prop.memoryBusWidth);
+		printf("  Peak Memory Bandwidth (GB/s): %f\n\n",
+			2.0*prop.memoryClockRate*(prop.memoryBusWidth/8)/1.0e6);
+		printf ("Device %d has compute capability %d.%d.\n", i,
+        prop.major, prop.minor);
+	}
+	cout << "Computations will be on the first device... " << endl;
+	gpuErrchk(cudaSetDevice(0));  
+
+	return;
+}
+#endif
+
+
 /****************************************************/
 bool CheckSens(string path, vector<string> coils)
 {
@@ -440,7 +595,7 @@ int main(int argc, char *argv[])
 	seq.push_back("epi.xml");
 	seq.push_back("gre.xml");
 	seq.push_back("tse.xml");
-	seq.push_back("analytic.xml");
+	// seq.push_back("analytic.xml");
 	seq.push_back("radial.xml");
 	seq.push_back("radial2.xml");
 	seq.push_back("spiral.xml");
@@ -449,7 +604,7 @@ int main(int argc, char *argv[])
 	seq.push_back("extpulses.xml");
 	seq.push_back("epi_modular.xml");
 	seq.push_back("trapezoid.xml");
-	seq.push_back("eddycurrents.xml");
+	// seq.push_back("eddycurrents.xml");
 
 	// sequences to output for scanner execution
 	vector<string> outseq;
@@ -465,6 +620,24 @@ int main(int argc, char *argv[])
 	coils.push_back("1chext.xml");
 
 	bool status = true;
+
+#ifdef MODEL_ON_GPU
+	// sequences to test GPU-JEMRIS
+	// ginac was disabled 
+	vector<string> seq_gpu;
+	seq_gpu.push_back("ThreePulses.xml");
+	seq_gpu.push_back("epi.xml");
+	seq_gpu.push_back("gre.xml");
+	seq_gpu.push_back("tse.xml");
+	seq_gpu.push_back("radial.xml");
+	seq_gpu.push_back("radial2.xml");
+	seq_gpu.push_back("spiral.xml");
+	seq_gpu.push_back("sli_sel.xml");
+	seq_gpu.push_back("var_dur.xml");
+	seq_gpu.push_back("extpulses.xml");
+	seq_gpu.push_back("epi_modular.xml");
+	seq_gpu.push_back("trapezoid.xml");
+#endif
 
 	switch (atoi(input.c_str()))
 	{
@@ -486,6 +659,22 @@ int main(int argc, char *argv[])
 	default:
 		cout << "\nsanityck: unknown input\n\n";
 		break;
+
+#ifdef MODEL_ON_GPU
+	case(6): 
+		PrintDevices(); 
+		cout << "Comparing GPU simulations to the v2.8-approved signals... " << endl;
+		status = CheckSigs_onGPU(path,seq_gpu);
+		break; // for the defined sequences, compare signals from the GPU simulations to the approved signals from v2.8
+		gpuErrchk(cudaGetLastError());
+
+	case(7): 
+		cout << "Comparing GPU simulations to the CPU simulations... " << endl; 
+		status = CheckSigs_GPUvsCPU(path,seq_gpu); 
+		break;  // test signals from CPU and GPU simulations for some sequences
+		gpuErrchk(cudaGetLastError());
+#endif
+
 	}
 
 	// return exit code

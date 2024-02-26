@@ -32,6 +32,25 @@
 #include "Declarations.h"
 #include "NDData.h"
 
+#ifdef MODEL_ON_GPU // AN-2022
+#include <cuda_runtime.h>
+
+/** AN-2022
+* @brief sum operator of the two double3 variables
+*/
+struct CustomSum {
+    __device__
+    double3 operator()(const double3& a, const double3& b) const {
+        // return a+b;
+      double3 r;
+      r.x = a.x + b.x;
+      r.y = a.y + b.y;
+      r.z = a.z + b.z;
+      return r;
+    }
+};
+#endif  // AN-2022***
+
 /**
  * @brief Base class of coil objects
  */
@@ -165,6 +184,54 @@ class Coil : public Prototype {
 
 	double GetNorm (){return m_norm;};
 
+#ifdef MODEL_ON_GPU 
+// AN-2022
+    
+    /**
+     * @brief calculate coil sensitivity maps for all spins and save them in the provided pointers sens_all, phase_all
+     */
+    void GetMapsAll (double* sens_magn_all, double* sens_phase_all, double* sample_values, 
+		int N_props, bool magnitude_only);   
+
+    /**
+     * @brief precalculate coil sensitivities for all spins, allocate memory on GPU and tranfer the maps
+     */
+    void InitCoilSensGPU (size_t* sample_dims, double* sample_vals, cudaStream_t stream);
+
+    /**
+     * @brief initialize GPU memory for solution vectors and reduction operator 
+     */
+    void InitSolutionArraysGPU ();
+
+    /**
+     * @brief in case of dynamic effects, allocate extra GPU memory for "dynamic" coil sensitivities
+     *        in case of interpolated coil maps, use dynamic buffer to store interpolated maps
+     */
+    void BufferDynCoils ();
+    
+    /**
+     * @brief interpolate the coil sensitivity maps on GPU
+     */
+    void UpdateDynMapsGPU (cudaStream_t stream=0);   
+    
+    /**
+     * @brief receive on all streams async-ly and write signals to repository at once
+                each stream is assigned to a receive channel in multi-channel
+     */
+    void ReceiveGPU (long lADC, cudaStream_t stream);
+
+    /**
+     * @brief write bulk magnetization into signal repository
+     */
+    void WriteSignal (long lADC);
+
+    /**
+     * @brief clean up the GPU memory for solution vectors and reduction operator 
+     */
+    void DestroySolutionArraysGPU ();
+
+#endif  // AN-2022***
+
  protected:
 
     /**
@@ -172,8 +239,8 @@ class Coil : public Prototype {
      */
     Coil() {};
 
-    double		m_position[3];	/**< Center location   */
-    Signal*		m_signal;    	/**< Signal repository */
+    double		    m_position[3];	/**< Center location   */
+    Signal*		    m_signal;    	/**< Signal repository */
     unsigned		m_mode;      	/**< My mode (RX/TX)      */
     double			m_azimuth; 		/**< Change of coordinate system: azimuth angle*/
     double			m_polar;   		/**< Change of coordinate system: polar angle*/
@@ -191,6 +258,22 @@ class Coil : public Prototype {
     NDData<double>  m_senspha;
 
     double Unwrap(double diff,bool magnitude); /**< helper function to check for phase wraps in interpolation of phase maps. */
+
+// AN-2022: members needed for the GPU computations
+#ifdef MODEL_ON_GPU
+    double3*        h_sol;          /**< temporary storage for the signal on host   */
+    double3*        d_sol;          /**< temporary storage for the signal on device   */
+    double3*        d_sol_vec;      /**< temporary storage for the solution on device   */
+    size_t          temp_storage_bytes;     /**< storage buffer size for the reception reduction operator   */
+    void*           d_temp_storage;        /**< temporary storage buffer for the reception reduction operator   */
+    double3         init;           /**< initial value for the reception reduction operator   */
+    CustomSum       sum_op;         /**< reception reduction operator, separate for all coil channels  */
+    double*         sensmag_gpu;        /**< coil sensitivity magnitude on GPU   */
+    double*         senspha_gpu;        /**< coil sensitivity phase on GPU   */
+    double*         sensmag_gpu_dyn;    /**< interpolated coil sensitivity magnitude and phase on GPU   */
+    double*         senspha_gpu_dyn;    /**< in case dynamic effects are on   */   
+    size_t*         map_dims;       /**< dimensions of the provided coil sensitivity maps   */
+#endif  // AN-2022***
 
 };
 
