@@ -24,6 +24,11 @@
  *  Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
  */
 
+/* 
+AN-2022: updated to support the newer CVode version 5.7;
+         included components for the numerical model on GPU
+*/ 
+
 #include "Bloch_CV_Model.h"
 #include "DynamicVariables.h"
 //MODIF
@@ -31,7 +36,15 @@
 #include <fstream>
 //MODIF***
 
+// AN-2022
+#ifdef MODEL_ON_GPU
+#include "Declarations.h"
+#include <cuda_runtime.h>
+#include <nvector/nvector_cuda.h> 
+#endif
+// AN-2022***
 
+#ifndef MODEL_ON_GPU // AN-2022
 /**********************************************************/
 inline static int bloch (realtype rt, N_Vector y, N_Vector ydot, void *pWorld) {
 
@@ -175,10 +188,10 @@ Bloch_CV_Model::Bloch_CV_Model     () : m_tpoint(0) {
     m_ropt[HMAX]   = 100000.0;// the maximum stepsize in msec of the integrator*/
     m_reltol       = RTOL;
 
-     // create cvode memory pointer; no mallocs done yet.
+    // create cvode memory pointer; no mallocs done yet.
     m_cvode_mem = CVodeCreate (CV_ADAMS);
 
- 
+
     // cvode allocate memory.
     // do CVodeMalloc with dummy values y0,abstol once here;
     // -> CVodeReInit can later be used
@@ -223,11 +236,33 @@ Bloch_CV_Model::Bloch_CV_Model     () : m_tpoint(0) {
     if(CVodeSVtolerances(m_cvode_mem, m_reltol, abstol)!= CV_SUCCESS){
     	cout << "CVodeSVtolerances failed! aborting..." << endl;exit (-1);
     }
-    if(CVDiag(m_cvode_mem) != CV_SUCCESS){
-    	cout << "CVDiag failed! aborting..." << endl;exit (-1);
+
+    // AN-2022
+    int                 mxiter  = 20;
+    int                 maa     = 0;           // acceleration vectors
+    double              damping = RCONST(1.0); 
+    NLS = SUNNonlinSol_FixedPoint(y0, maa); // y0 - a NVECTOR template for
+	// cloning vectors needed within the solver
+    if((void *)NLS == NULL) {
+	cout << "SUNNonlinSol_FixedPoint initialization failed!" << endl; exit(-1);
     }
- 
+    if(SUNNonlinSolSetMaxIters(NLS, mxiter) != CV_SUCCESS) {
+	cout << "Setting SUNNonlinSol max iterations failed!" << endl; exit(-1);
+    }
+    if(SUNNonlinSolSetDamping_FixedPoint(NLS, damping) != CV_SUCCESS) {
+	cout << "Setting SUNNonlinSol damping coefficient failed!" << endl; exit(-1);
+    }
+    if (CVodeSetNonlinearSolver(m_cvode_mem, NLS) != CV_SUCCESS){
+	cout << "Setting the SUNNonlinSol failed" << endl; exit(-1);
+    }
+    /* AN: optional CVDiag method if explicit solver is preferred 
+    if (CVDiag(m_cvode_mem, NLS) != CV_SUCCESS) {
+	    cout << "CVDiag failed " << endl; exit(-1);
+    }
+    */
     CVodeSetErrFile(m_cvode_mem, NULL);
+
+
 
     N_VDestroy_Serial(y0);
     N_VDestroy_Serial(abstol);
@@ -290,7 +325,7 @@ bool Bloch_CV_Model::Calculate(double next_tStop){
 	int flag;
 	do {
 		flag=CVode(m_cvode_mem, m_world->time, ((nvec*) (m_world->solverSettings))->y, &m_tpoint, CV_NORMAL);
-        
+
 	} while ((flag==CV_TSTOP_RETURN) && (m_world->time-TIME_ERR_TOL > m_tpoint ));
 
 
@@ -326,3 +361,397 @@ void Bloch_CV_Model::PrintFinalStats () {
 //    printf("nni = %-6ld ncfn = %-6ld netf = %ld\n \n"   , m_iopt[NNI], m_iopt[NCFN], m_iopt[NETF]);
 
 }
+
+
+#else // AN-2022: if MODEL_ON_GPU == 1
+/**********************************************************/
+// AN-2022: Bloch kernel for GPU computations
+__global__ void BlochKernel (realtype *y, realtype *y_dot,
+                    realtype* d_SeqVal, bool tx_ideal, realtype* tx_coils_sum, 
+                    realtype* s_vals, realtype* dB, realtype* positions, 
+                    realtype* NonLinGradField, realtype GMAXoverB0,
+                    int N_SpinProps, int N_spins_total,
+                    // required only for the multi-stream option
+                    int N_spins_stream) {
+                        
+    int tid = blockIdx.x * blockDim.x + threadIdx.x;
+    if (tid < N_spins_stream) {
+        int spin_id = tid; // if want multi-stream computations: + iter_stream*N_spins_stream
+        // cylndrical components of mangetization
+        realtype Mxy, phi, Mz; 
+        realtype s, c, Mx, My, Mx_dot, My_dot, Mz_dot;
+        realtype Bx, By, Bz;
+        realtype DeltaB = *(dB+spin_id);
+        // sample properties    
+        realtype r1 = s_vals[spin_id*N_SpinProps+R1];
+        realtype r2 = s_vals[spin_id*N_SpinProps+R2];
+        realtype r2s = s_vals[spin_id*N_SpinProps+R2S];
+        realtype m0 = s_vals[spin_id*N_SpinProps+M0];
+        // RF phase at the timepoint
+        realtype phase = d_SeqVal[RF_PHS];
+
+        // calculating Bx and By is faster with uniform-Tx coil 
+        // math functions on GPU are different for single and double precision
+        if (tx_ideal) {
+            Bx = d_SeqVal[RF_AMP]*cos(phase);
+            By = d_SeqVal[RF_AMP]*sin(phase);
+        }
+        else {
+            phase = fmod( phase, (realtype)(2*PI) ); 
+            Bx = d_SeqVal[RF_AMP] * (tx_coils_sum[spin_id]) * cos(phase);
+            By = d_SeqVal[RF_AMP] * (tx_coils_sum[spin_id]) * sin(phase);
+        }
+
+        Bz = positions[3*spin_id]*(*(d_SeqVal+GRAD_X))+ positions[3*spin_id+1]*(*(d_SeqVal+GRAD_Y))+ positions[3*spin_id+2]*(*(d_SeqVal+GRAD_Z))
+            + DeltaB;
+
+        // Add non-linear gradients if present
+        if (NonLinGradField) 
+            Bz += NonLinGradField[spin_id];
+        
+        // concominant field calculation step
+        if (GMAXoverB0 != 0.0) 
+            Bz += ((0.5*GMAXoverB0)*(pow(GRAD_X*positions[3*spin_id+2]-0.5*GRAD_Z*positions[3*spin_id],2) + 
+                    pow(GRAD_Y*positions[3*spin_id+2]-0.5*GRAD_Z*positions[3*spin_id+1],2)));
+
+        // restrict phase to [0, 2*PI]
+        if (fabs(y[3*tid+PHASE]) > 1e11) {
+            y[3*tid+PHASE] = fmod(y[3*tid+PHASE],(realtype)(TWOPI));
+        }
+
+        Mxy = y[3*tid + AMPL];
+        phi = y[3*tid + PHASE];
+        Mz = y[3*tid + ZC];
+
+        // avoid CVODE warnings (does not change physics!)
+        // trivial case: no transv. magnetisation AND no excitation
+        if (Mxy<ATOL1*m0 && (d_SeqVal[RF_AMP])<BEPS) {
+
+            y_dot[3*tid+AMPL] = 0;
+            y_dot[3*tid+PHASE] = 0;
+            //further, longit. magnetisation already fully relaxed
+            if (fabs(m0 - Mz)<ATOL3) {
+                y_dot[3*tid+ZC] = 0.;
+                return;
+            }
+
+        } else {
+
+            //compute cartesian components of transversal magnetization
+            c = cos(phi);
+            s = sin(phi);
+            Mx = c*Mxy;
+            My = s*Mxy;
+
+            //compute bloch equations
+            Mx_dot =   Bz*My - By*Mz - r2*Mx;
+            My_dot = - Bz*Mx + Bx*Mz - r2*My;
+            Mz_dot =   By*Mx - Bx*My ;
+
+            //compute derivatives in cylindrical coordinates
+            y_dot[3*tid+AMPL]  =  c*Mx_dot + s*My_dot;
+            y_dot[3*tid+PHASE] = (c*My_dot - s*Mx_dot) / (Mxy>BEPS?Mxy:BEPS); //avoid division by zero
+        }
+
+        //longitudinal relaxation
+        Mz_dot +=  r1*(m0 - Mz);
+        y_dot[3*tid+ZC] = Mz_dot;
+    }
+}
+
+/**********************************************************/
+// RHS of the Bloch equations on GPU
+inline static int blochGPU (realtype rt, N_Vector y, N_Vector y_dot, void *pWorld) {
+
+    World* pW = (World*) pWorld;
+    // get the main stream where to launch the blochKernel
+    cudaStream_t currStream = pW->currStream;
+    int N_spins_stream = pW->TotalSpinNumber;
+    DynamicVariables* dv = DynamicVariables::instance();
+	double t = (double) rt;
+
+    if (t < 0.0 || t > pW->pAtom->GetDuration()) {
+        realtype* p_ydot_h = N_VGetHostArrayPointer_Cuda(y_dot);
+    	// this case can happen when searching for step size; in this area no solution is needed
+        // -> set ydot to any defined value.
+    	for (int lspin=0; lspin<N_spins_stream; lspin++) {
+            p_ydot_h[3*lspin+0] = 0.;
+            p_ydot_h[3*lspin+1] = 0.;
+            p_ydot_h[3*lspin+2] = 0.;
+        }
+        N_VCopyToDevice_Cuda(y_dot);
+    	return 0;
+    }
+	double time = pW->total_time+t;
+
+    // AN-2022: no diffusion and some other dynamic functions are not yet implemented
+
+    // update the SpinPositions if there are dynamic effects
+    if (pW->dynamic) {
+        dv->m_Motion->GetValue(time, &t); // dummpy pointer as position is different for all spins
+        // dv->m_T2prime->GetValue(time, &DeltaB);
+        // dv->m_R1->GetValue_AllSpins(time, 1);
+        // dv->m_R2->GetValue_AllSpins(time, 2);
+        // dv->m_M0->GetValue_AllSpins(time, 3);
+    }
+
+    // AN-2022: spin activation check step is skipped
+
+    //get current magn field parameters from the sequence
+    int N_SeqParams = 5;
+    double d_SeqVal[N_SeqParams] = {0.}; // [B1magn,B1phase,Gx,Gy,Gz]
+    // GetValue is left in double precision 
+    pW->pAtom->GetValue(d_SeqVal, t);        								    // calculates also pW->NonLinGradField
+    if (pW->pStaticAtom != NULL) pW->pStaticAtom->GetValue(d_SeqVal, time);	// calculates static offsets
+
+    // From the AtomicSeq.cpp: is here to keep the other file unchanged
+    if (pW->pAtom->HasNonLinGrad()) {
+        // with lingering fields, change pW->NonLinGradField_GPU 
+        pW->pAtom->GetValueLingeringEddyCurrents(d_SeqVal,t);	         // calculates lingering eddy currents
+        cudaMemcpyAsync (pW->NonLinGradField_GPU, pW->NonLinGradField, 
+            pW->TotalSpinNumber*sizeof(realtype), cudaMemcpyHostToDevice, pW->currStream);
+    }
+    
+    realtype* seq_arr;      // sequence values in realtype
+    // conversion to float if needed
+#if defined(SUNDIALS_SINGLE_PRECISION)
+    seq_arr = double2floatArray(d_SeqVal, N_SeqParams);
+#elif defined(SUNDIALS_DOUBLE_PRECISION)
+    seq_arr = d_SeqVal;
+#endif
+     
+    // copy the sequence values to GPU
+	cudaMemcpyAsync (pW->d_SeqVal_GPU, seq_arr, N_SeqParams*sizeof(realtype), 
+        cudaMemcpyHostToDevice, currStream);
+
+    realtype* p_y_d = N_VGetDeviceArrayPointer_Cuda(y);
+    realtype* p_ydot_d = N_VGetDeviceArrayPointer_Cuda(y_dot);
+    int grid = (N_spins_stream + block - 1) / block; // blocks per grid, block size is hardcoded
+    BlochKernel<<< grid, block, 0, currStream >>>(p_y_d, p_ydot_d, pW->d_SeqVal_GPU, 
+                                        pW->m_tx_ideal, pW->m_tx_coils_sum, 
+                                        pW->Values, pW->deltaB, pW->SpinPositions,
+                                        pW->NonLinGradField_GPU, realtype(pW->GMAXoverB0),
+                                        pW->GetNoOfSpinProps(), pW->TotalSpinNumber,
+                                        N_spins_stream);
+    gpuErrchk(cudaGetLastError());                                    
+    return(0);
+}
+
+/**********************************************************/
+// helper function for CVode functions, checking the return values
+static int check_retval(void *returnvalue, const char *funcname, int opt)
+{
+  int *retval;
+
+  /* Check if SUNDIALS function returned NULL pointer - no memory allocated */
+  if (opt == 0 && returnvalue == NULL) {
+    fprintf(stderr, "\nSUNDIALS_ERROR: %s() failed - returned NULL pointer\n\n",
+            funcname);
+    return(1); }
+
+  /* Check if retval < 0 */
+  else if (opt == 1) {
+    retval = (int *) returnvalue;
+    if (*retval < 0) {
+      fprintf(stderr, "\nSUNDIALS_ERROR: %s() failed with retval = %d\n\n",
+              funcname, *retval);
+      return(1); }}
+
+  /* Check if function returned NULL pointer - no memory allocated */
+  else if (opt == 2 && returnvalue == NULL) {
+    fprintf(stderr, "\nMEMORY_ERROR: %s() failed - returned NULL pointer\n\n",
+            funcname);
+    return(1); }
+
+  return(0);
+
+}
+
+/**********************************************************/
+// Constructor of the GPU model
+Bloch_CV_Model::Bloch_CV_Model     ()  
+{
+
+    // create nvec for the model init
+    m_world->solverSettings = new nvec;
+    N_Vector y0;
+    m_tpoint = 0;
+    int N_spins_total = m_world->TotalSpinNumber;
+    int retval;     // for the return value checks
+
+    streams = (cudaStream_t *) malloc(NoOfStreams * sizeof(cudaStream_t));
+    for (int i = 0; i < NoOfStreams; i++) {
+        gpuErrchk(cudaStreamCreateWithFlags(&(streams[i]), cudaStreamNonBlocking));
+	}
+
+    ifstream CVODEfile;
+    long int MXSTEP;
+
+    // setting the solver tolerances
+    realtype atol1, atol2, atol3;
+    CVODEfile.open("CVODEerr.dat", ifstream::in);
+    if (CVODEfile.is_open()) {
+        CVODEfile>>m_reltol>>atol1>>atol2>>atol3>>MXSTEP;
+        cout<<"CVODE file open"<<endl;
+    }
+    else  {
+        m_reltol       = (realtype)RTOL;
+        atol1  = (realtype)ATOL1;
+        atol2 = (realtype)ATOL2;
+        atol3   = (realtype)ATOL3;
+        MXSTEP=100000;
+    }
+
+    ((nvec*) (m_world->solverSettings))->m_abstol = std::min({atol1, atol2, atol3});
+    y0 = NULL;
+    // cvode allocate memory.
+    // do CVodeMalloc with dummy values y0,abstol once here;
+    // CVodeReInit can later be used
+    m_cvode_mem = CVodeCreate (CV_ADAMS);
+
+    // Allocate thevector for ODEs
+    y0 = N_VNew_Cuda((NEQ*N_spins_total));  
+    if(check_retval((void*)y0, "N_VNew_Cuda", 0)) exit(-1);
+
+    /* Use a non-default cuda stream for streaming and reduction kernel execution */
+    SUNCudaThreadDirectExecPolicy stream_exec_policy(block, streams[0]);
+    SUNCudaBlockReduceExecPolicy reduce_exec_policy(block, 0, streams[0]);
+    retval = N_VSetKernelExecPolicy_Cuda(y0, 
+            &stream_exec_policy, &reduce_exec_policy);
+    if(check_retval(&retval, "N_VSetKernelExecPolicy_Cuda", 0)) exit(-1);
+    
+    retval = CVodeInit(m_cvode_mem, blochGPU, 0, y0);
+    if(check_retval(&retval, "CVodeInit", 1)) exit(-1);
+
+    retval = CVodeSStolerances(m_cvode_mem, m_reltol, ((nvec*) (m_world->solverSettings))->m_abstol);
+    if (check_retval(&retval, "CVodeSStolerances", 1)) exit(-1);
+
+    // use the same World for all streams
+    retval = CVodeSetUserData(m_cvode_mem, (void*)m_world);
+    if (check_retval(&retval, "CVodeSetUserData", 1)) exit(-1);
+
+    int                mxiter  = 20;
+    int                maa     = 0;           // acceleration vectors
+    realtype           damping = RCONST(1.0); 
+    NLS = SUNNonlinSol_FixedPoint(y0, maa); // y0 - a NVECTOR template for
+                                            // cloning vectors needed within the solver
+
+    if (check_retval(NLS, "SUNNonlinSol initialization", 0)) exit(-1);
+
+    retval = SUNNonlinSolSetMaxIters(NLS, mxiter);
+    if (check_retval(&retval, "SUNNonlinSolSetMaxIters", 1)) exit(-1);
+
+    retval = SUNNonlinSolSetDamping_FixedPoint(NLS, damping);
+    if (check_retval(&retval, "SUNNonlinSolSetDamping_FixedPoint", 1)) exit(-1);
+
+    retval = CVodeSetNonlinearSolver(m_cvode_mem, NLS);
+    if (check_retval(&retval, "CVodeSetNonlinearSolver", 1)) exit(-1);    
+
+    N_VDestroy(y0);
+    retval = CVodeSetMaxNumSteps(m_cvode_mem, MXSTEP);
+    if (check_retval(&retval, "CVodeSetMaxNumSteps", 1)) exit(-1);  
+
+    // maximum number of warnings t+h = t (if number negative -> no warnings are issued )
+    retval = CVodeSetMaxHnilWarns(m_cvode_mem,2);
+    if (check_retval(&retval, "CVodeSetMaxHnilWarns", 1)) exit(-1);
+
+}
+
+/**********************************************************/
+// kernel to assign to NVector values from the solution vector
+__global__ void SolutionToNVectorKernel (realtype* sol, realtype* p_y, int N_spins_stream) {
+    int spin_idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (spin_idx < N_spins_stream) {
+        p_y[3*spin_idx+0] = sol[3*spin_idx+AMPL];
+        p_y[3*spin_idx+1] = fmod(sol[3*spin_idx+PHASE], (realtype)(TWOPI));
+        p_y[3*spin_idx+2] = sol[3*spin_idx+ZC];
+    }
+}
+
+/**********************************************************/
+// Initialize the CVode solver on GPU
+// is kept with running on a CUDA stream options
+// ! the only function which allocates GPU memory while running through sequence loop, necessary to avoid errors
+void Bloch_CV_Model::InitSolverGPU (cudaStream_t stream, bool alloc_nvector_gpu) {
+
+    if (alloc_nvector_gpu) {
+        (((nvec*) (m_world->solverSettings))->y) = N_VNew_Cuda((NEQ*m_world->TotalSpinNumber));
+        if (check_retval((void*)((nvec*)(m_world->solverSettings))->y, "N_VNew_Cuda", 0)) exit(-1);
+    }
+
+    int grid = (m_world->TotalSpinNumber + block - 1) / block; // blocks per grid
+    int retval;
+
+    /* Use a non-default cuda stream for streaming and reduction kernel execution */
+    SUNCudaThreadDirectExecPolicy stream_exec_policy(block, stream);
+    SUNCudaBlockReduceExecPolicy reduce_exec_policy(block, 0, stream);  
+    retval = N_VSetKernelExecPolicy_Cuda(((nvec*)(m_world->solverSettings))->y, 
+            &stream_exec_policy, &reduce_exec_policy);
+    if(check_retval(&retval, "N_VSetKernelExecPolicy_Cuda", 0)) exit(-1);
+
+    realtype* p_y = N_VGetDeviceArrayPointer_Cuda((((nvec*)(m_world->solverSettings))->y));
+    // copy values from the solution at the previous time to NVector
+    SolutionToNVectorKernel <<< grid, block, 0, stream >>> ((m_world->solution),
+         p_y, m_world->TotalSpinNumber);
+
+    if ( CVodeReInit(m_cvode_mem,0,(((nvec*) (m_world->solverSettings))->y)) != CV_SUCCESS ) {
+        cout << "CVodeReInit failed! aborting..." << endl; exit(-1);
+    }
+
+}
+
+/**********************************************************/
+// Function to call the solver in the sequence loop
+bool Bloch_CV_Model::CalculateGPU(double next_tStop, cudaStream_t stream){
+
+	if ( m_world->time <= 0.0)  m_world->time = (double)RTOL;
+	m_world->solverSuccess=true;
+
+	CVodeSetStopTime(m_cvode_mem, (realtype)next_tStop);
+	int flag;
+	do {
+        m_world->currStream = stream; // the stream blochKernel will run on
+        flag=CVode(m_cvode_mem, (realtype)m_world->time, ((((nvec*)(m_world->solverSettings))->y)),
+                     &m_tpoint, CV_NORMAL); 
+	} while ((flag==CV_TSTOP_RETURN) && ((realtype)m_world->time-TIME_ERR_TOL > m_tpoint));
+
+	if(flag < 0) { m_world->solverSuccess=false; }
+
+	//reinit needed?
+	if (m_world->phase == -2.0 && m_world->solverSuccess) {
+        int retval;
+        SUNCudaThreadDirectExecPolicy stream_exec_policy(block, stream);
+        SUNCudaBlockReduceExecPolicy reduce_exec_policy(block, 0, stream);
+    
+        // Use a non-default CUDA stream for streaming and reduction kernel execution 
+        retval = N_VSetKernelExecPolicy_Cuda(((nvec*) (m_world->solverSettings))->y,
+             &stream_exec_policy, &reduce_exec_policy);
+        if(check_retval(&retval, "N_VSetKernelExecPolicy_Cuda", 0)) exit(-1);
+
+        if ( CVodeReInit(m_cvode_mem,((realtype)(m_world->time)+TIME_ERR_TOL), 
+            (((nvec*) (m_world->solverSettings))->y)) != CV_SUCCESS ) {
+            cout << "CVodeReInit failed! aborting..." << endl; exit(-1);
+            }
+    }
+    // AN-2022: works only <1e-7, then fixed at the value=1e-7
+    // CVodeSetInitStep(m_cvode_mem,m_world->pAtom->GetDuration()/1e9);
+
+    realtype* p_y = N_VGetDeviceArrayPointer_Cuda((((nvec*) (m_world->solverSettings))->y));
+    // copy the DE solution to the solution
+    cudaMemcpyAsync( m_world->solution, p_y, 
+        3*m_world->TotalSpinNumber*m_world->GetNoOfCompartments()*sizeof(realtype), 
+            cudaMemcpyDeviceToDevice, stream );
+
+	//higher accuracy than 1e-10 not useful. Return success and hope for the best.
+    if(m_accuracy_factor < 1e-10) { m_world->solverSuccess=true; }
+	return m_world->solverSuccess;
+}
+
+
+/**********************************************************/
+void Bloch_CV_Model::FreeSolverGPU   () {
+
+    N_VDestroy( (((nvec*) (m_world->solverSettings))->y) );
+}
+
+#endif
