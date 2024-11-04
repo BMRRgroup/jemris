@@ -41,6 +41,10 @@
 
 using namespace std;
 
+#ifdef MODEL_ON_GPU
+#include <sundials/sundials_types.h>   /* definition of type realtype */
+#endif
+
 /**
  * @brief pure virtual base class for all Trajectories
  */

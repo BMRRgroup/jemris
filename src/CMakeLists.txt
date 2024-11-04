@@ -49,11 +49,12 @@ list (APPEND CORE_DUAL_SRC CoilArray.cpp CoilArray.h CoilPrototypeFactory.cpp
 
 # These files contain parts of the GPU computations and need to be compiled with nvcc for GPU
 # they can switch between GPU and CPU versions using the MODEL_ON_GPU definition
-list (APPEND CORE_COMPUT_SRC Coil.cpp Sample.cpp World.cpp
-    Coil.h Sample.h World.h
-    Bloch_CV_Model.cpp Bloch_CV_Model.h)
+list (APPEND CORE_COMPUT_SRC Coil.h Coil.cpp Sample.h Sample.cpp 
+    World.h World.cpp
+    Bloch_CV_Model.h Bloch_CV_Model.cpp )
     # Note for AN: Model needs to be compiled with a different definition for pjemris
 
+list (APPEND CORE_CUDA CudaKernels.cuh CudaKernels.cu TrajectoryKernels.cuh TrajectoryKernels.cu)
 # Those directories do not exist, right?
 #include_directories (${PROJECT_SOURCE_DIR}/src/core
 #  ${PROJECT_SOURCE_DIR}/src/matrix/io) 
@@ -135,11 +136,9 @@ elseif (MODEL_ON_GPU MATCHES 1)
   list(APPEND CUDA_NVCC_FLAGS "--compiler-options; -std=c++11; -w") #-arch=sm_20; 
   include_directories(/usr/local/cuda/include/)
 
-  set_source_files_properties(${CORE_COMPUT_SRC} Model.h Model.cpp
-    TrajectoryKernels.cuh TrajectoryKernels.cu
+  set_source_files_properties(${CORE_COMPUT_SRC} ${CORE_CUDA} Model.h Model.cpp
     PROPERTIES LANGUAGE CUDA)
-  add_library ( core_GPU STATIC ${CORE_SRC} ${CORE_DUAL_SRC} ${CORE_COMPUT_SRC} Model.h Model.cpp
-     TrajectoryKernels.cuh TrajectoryKernels.cu)
+  add_library ( core_GPU STATIC ${CORE_SRC} ${CORE_DUAL_SRC} ${CORE_COMPUT_SRC} ${CORE_CUDA} Model.h Model.cpp)
   set_target_properties(core_GPU PROPERTIES COMPILE_FLAGS -DMODEL_ON_GPU=1)
   target_link_libraries (core_GPU ${COMMON_LIBS} )
 

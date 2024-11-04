@@ -42,6 +42,10 @@ AN-2022: includes components for the numerical model on GPU
 #include "time.h"
 #include "Trajectory.h"
 
+#ifdef MODEL_ON_GPU
+#include "CudaKernels.cuh"
+#endif
+
 /**************************************************/
 Model::Model() : m_tx_coil_array(0), m_sample(0), m_rx_coil_array(0), m_concat_sequence(0) {
 
@@ -428,7 +432,7 @@ inline void Model::UpdateProcessCounter (const long lSpin) {
 
 }
 
-#else	// AN-2022
+#elif MODEL_ON_GPU == 1
 /*************************************************************************/
 inline void Model::UpdateProcessCounterGPU (const long lADC) {
 
@@ -451,22 +455,6 @@ inline void Model::UpdateProcessCounterGPU (const long lADC) {
 		printf("Occupied GPU memory [bytes]\t %d / %d ", 
 			(total_mem_bytes - free_mem_bytes), total_mem_bytes);
 	}	
-}
-
-/**************************************************/
-// GPU kernel to init the solution vector by M0 
-__global__ void InitSolutionKernel (realtype* solution, realtype* values, int NoOfSpinProps,
-	 	int NoOfCompartments, int SpinOffset, int NoSpinsStream) {
-
-	int tid = blockIdx.x * blockDim.x + threadIdx.x;
-	int spin_idx = SpinOffset + tid;
-	if (tid < NoSpinsStream) {
-		// if compartments are included
-		// for (int i=0; i<NoOfCompartments; i++){
-		solution[3*spin_idx+0] = 0.0;
-		solution[3*spin_idx+1] = 0.0;
-		solution[3*spin_idx+2] = 1.0 * values[spin_idx*NoOfSpinProps+3]; 
-	}
 }
 
 /**************************************************/

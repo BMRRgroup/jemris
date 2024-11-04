@@ -186,6 +186,20 @@ class Coil : public Prototype {
 
 #ifdef MODEL_ON_GPU 
 // AN-2022
+    /** 
+    * @brief sum operator of the two double3 variables
+    */
+    struct CustomSum {
+        __device__
+        double3 operator()(const double3& a, const double3& b) const {
+            // return a+b;
+        double3 r;
+        r.x = a.x + b.x;
+        r.y = a.y + b.y;
+        r.z = a.z + b.z;
+        return r;
+        }
+    };
     
     /**
      * @brief calculate coil sensitivity maps for all spins and save them in the provided pointers sens_all, phase_all
