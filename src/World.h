@@ -59,19 +59,19 @@ class EddyPulse;
     /**
      * @brief convert the double array into a single array
      */
-realtype* double2floatArray(double* arr, unsigned n);
+    realtype* double2floatArray(double* arr, unsigned n);
 
     /**
      * @brief global params for all GPU kernels
      */
-static const int NoOfStreams = 5; // fixed number of streams to use
-static const int block = 512; // threads per block
+    static const int NoOfStreams = 5; // fixed number of streams to use
+    static const int block = 512; // threads per block
 
     /**
      * @brief CUDA error checking fucntion
      */
-void gpuAssert(cudaError_t code, const char *file, const int line, bool abort=true);
-#define gpuErrchk(ans) gpuAssert((ans), __FILE__, __LINE__);
+    void gpuAssert(cudaError_t code, const char *file, const int line, bool abort=true);
+    #define gpuErrchk(ans) gpuAssert((ans), __FILE__, __LINE__);
 #endif  // AN-2022***
 
 class World {

@@ -32,6 +32,9 @@
 #include "BinaryContext.h"
 
 #include <math.h>
+#ifdef MODEL_ON_GPU
+#include "CudaKernels.cuh"
+#endif
 
 
 template <class T>
@@ -625,13 +628,6 @@ void Sample::CopyHelper (double* out) {
 // AN-2022
 #ifdef MODEL_ON_GPU
 /**********************************************************/
-// initialize random states vector of size streamsize = N spins on a stream
-__global__ void InitRNG(curandState *state) {
-    int idx = threadIdx.x + blockIdx.x * blockDim.x;
-    curand_init((unsigned long)clock(), idx, 0, &state[idx]);
-}
-
-/**********************************************************/
 // pin the memory of sample values for Async copy to GPU
 void Sample::PinEnsembleGPU() {
 
@@ -658,38 +654,6 @@ void Sample::PinEnsembleGPU() {
 		gpuErrchk( cudaMemcpy( &(d_m_res_posRND[i]), &(m_res_rt[i]), 1*sizeof(realtype), cudaMemcpyHostToDevice) );
 	}
 	gpuErrchk( cudaMemcpy( &(d_m_res_posRND[3]), &(m_pos_rand_rt), 1*sizeof(realtype), cudaMemcpyHostToDevice) );
-}
-
-/**********************************************************/
-// GPU kernel to add spin position randomness and randommness to the deltaB values if R2s!=R2
-__global__ void AddPosRandomGetDeltaBKernel (realtype* val, realtype* dB_all, realtype* positions, 
-	int NoOfCompartments, int NoOfSpinProps, 
-	realtype* d_m_res, int SpinOffset, int N_spins_stream, curandState_t* st){ 
-
-	int tid = blockIdx.x * blockDim.x + threadIdx.x;
-	int spin_idx = SpinOffset + tid;
-	if (tid < N_spins_stream)	{ 
-#if defined(SUNDIALS_SINGLE_PRECISION) 
-		val[spin_idx*NoOfSpinProps+XC] += curand_normal(&st[tid]) * d_m_res[XC] * d_m_res[3] / 100.0;		
-		val[spin_idx*NoOfSpinProps+YC] += curand_normal(&st[tid]) * d_m_res[YC] * d_m_res[3] / 100.0;
-		val[spin_idx*NoOfSpinProps+ZC] += curand_normal(&st[tid]) * d_m_res[ZC] * d_m_res[3] / 100.0;
-#elif defined(SUNDIALS_DOUBLE_PRECISION) 
-		val[spin_idx*NoOfSpinProps+XC] += curand_normal_double(&st[tid]) * d_m_res[XC] * d_m_res[3] / 100.0;		
-		val[spin_idx*NoOfSpinProps+YC] += curand_normal_double(&st[tid]) * d_m_res[YC] * d_m_res[3] / 100.0;
-		val[spin_idx*NoOfSpinProps+ZC] += curand_normal_double(&st[tid]) * d_m_res[ZC] * d_m_res[3] / 100.0;
-#endif
-		// extract spin positions to the separate array
-		positions[3*spin_idx+0] = val[spin_idx*NoOfSpinProps+XC];
-		positions[3*spin_idx+1] = val[spin_idx*NoOfSpinProps+YC];
-		positions[3*spin_idx+2] = val[spin_idx*NoOfSpinProps+ZC];
-		
-		realtype r2s = val[spin_idx*NoOfSpinProps+R2S];
-		realtype r2 = val[spin_idx*NoOfSpinProps+R2];
-		realtype r2prime = ((r2s > r2) ? (r2s - r2) : 0.0);
-		// 0.001 is bcs we compute in ms, but the value is in secs 
-		dB_all[spin_idx] = (0.001*(val[spin_idx*NoOfSpinProps+DB])) + tan(PI*(curand_uniform_double(&st[tid])-.5)) * r2prime;
-
-	}
 }
 
 /**********************************************************/

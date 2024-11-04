@@ -247,7 +247,6 @@ void gpuAssert(cudaError_t code, const char *file, const int line, bool abort/*=
         if (abort) exit(code);
     }
 }
-// void gpuErrchk(cudaError_t ans) {gpuAssert((ans), __FILE__, __LINE__);};
 
 /***********************************************************/
 // AN-2022: allocate buffer host memory to save the evolution history

@@ -39,7 +39,8 @@ AN-2022: updated to support the newer CVode version 5.7;
 // AN-2022
 #ifdef MODEL_ON_GPU
 #include "Declarations.h"
-#include <cuda_runtime.h>
+// #include <cuda_runtime.h>
+#include "CudaKernels.cuh"
 #include <nvector/nvector_cuda.h> 
 #endif
 // AN-2022***
@@ -363,102 +364,7 @@ void Bloch_CV_Model::PrintFinalStats () {
 }
 
 
-#else // AN-2022: if MODEL_ON_GPU == 1
-/**********************************************************/
-// AN-2022: Bloch kernel for GPU computations
-__global__ void BlochKernel (realtype *y, realtype *y_dot,
-                    realtype* d_SeqVal, bool tx_ideal, realtype* tx_coils_sum, 
-                    realtype* s_vals, realtype* dB, realtype* positions, 
-                    realtype* NonLinGradField, realtype GMAXoverB0,
-                    int N_SpinProps, int N_spins_total,
-                    // required only for the multi-stream option
-                    int N_spins_stream) {
-                        
-    int tid = blockIdx.x * blockDim.x + threadIdx.x;
-    if (tid < N_spins_stream) {
-        int spin_id = tid; // if want multi-stream computations: + iter_stream*N_spins_stream
-        // cylndrical components of mangetization
-        realtype Mxy, phi, Mz; 
-        realtype s, c, Mx, My, Mx_dot, My_dot, Mz_dot;
-        realtype Bx, By, Bz;
-        realtype DeltaB = *(dB+spin_id);
-        // sample properties    
-        realtype r1 = s_vals[spin_id*N_SpinProps+R1];
-        realtype r2 = s_vals[spin_id*N_SpinProps+R2];
-        realtype r2s = s_vals[spin_id*N_SpinProps+R2S];
-        realtype m0 = s_vals[spin_id*N_SpinProps+M0];
-        // RF phase at the timepoint
-        realtype phase = d_SeqVal[RF_PHS];
-
-        // calculating Bx and By is faster with uniform-Tx coil 
-        // math functions on GPU are different for single and double precision
-        if (tx_ideal) {
-            Bx = d_SeqVal[RF_AMP]*cos(phase);
-            By = d_SeqVal[RF_AMP]*sin(phase);
-        }
-        else {
-            phase = fmod( phase, (realtype)(2*PI) ); 
-            Bx = d_SeqVal[RF_AMP] * (tx_coils_sum[spin_id]) * cos(phase);
-            By = d_SeqVal[RF_AMP] * (tx_coils_sum[spin_id]) * sin(phase);
-        }
-
-        Bz = positions[3*spin_id]*(*(d_SeqVal+GRAD_X))+ positions[3*spin_id+1]*(*(d_SeqVal+GRAD_Y))+ positions[3*spin_id+2]*(*(d_SeqVal+GRAD_Z))
-            + DeltaB;
-
-        // Add non-linear gradients if present
-        if (NonLinGradField) 
-            Bz += NonLinGradField[spin_id];
-        
-        // concominant field calculation step
-        if (GMAXoverB0 != 0.0) 
-            Bz += ((0.5*GMAXoverB0)*(pow(GRAD_X*positions[3*spin_id+2]-0.5*GRAD_Z*positions[3*spin_id],2) + 
-                    pow(GRAD_Y*positions[3*spin_id+2]-0.5*GRAD_Z*positions[3*spin_id+1],2)));
-
-        // restrict phase to [0, 2*PI]
-        if (fabs(y[3*tid+PHASE]) > 1e11) {
-            y[3*tid+PHASE] = fmod(y[3*tid+PHASE],(realtype)(TWOPI));
-        }
-
-        Mxy = y[3*tid + AMPL];
-        phi = y[3*tid + PHASE];
-        Mz = y[3*tid + ZC];
-
-        // avoid CVODE warnings (does not change physics!)
-        // trivial case: no transv. magnetisation AND no excitation
-        if (Mxy<ATOL1*m0 && (d_SeqVal[RF_AMP])<BEPS) {
-
-            y_dot[3*tid+AMPL] = 0;
-            y_dot[3*tid+PHASE] = 0;
-            //further, longit. magnetisation already fully relaxed
-            if (fabs(m0 - Mz)<ATOL3) {
-                y_dot[3*tid+ZC] = 0.;
-                return;
-            }
-
-        } else {
-
-            //compute cartesian components of transversal magnetization
-            c = cos(phi);
-            s = sin(phi);
-            Mx = c*Mxy;
-            My = s*Mxy;
-
-            //compute bloch equations
-            Mx_dot =   Bz*My - By*Mz - r2*Mx;
-            My_dot = - Bz*Mx + Bx*Mz - r2*My;
-            Mz_dot =   By*Mx - Bx*My ;
-
-            //compute derivatives in cylindrical coordinates
-            y_dot[3*tid+AMPL]  =  c*Mx_dot + s*My_dot;
-            y_dot[3*tid+PHASE] = (c*My_dot - s*Mx_dot) / (Mxy>BEPS?Mxy:BEPS); //avoid division by zero
-        }
-
-        //longitudinal relaxation
-        Mz_dot +=  r1*(m0 - Mz);
-        y_dot[3*tid+ZC] = Mz_dot;
-    }
-}
-
+#elif MODEL_ON_GPU == 1 // AN-2022
 /**********************************************************/
 // RHS of the Bloch equations on GPU
 inline static int blochGPU (realtype rt, N_Vector y, N_Vector y_dot, void *pWorld) {
@@ -655,17 +561,6 @@ Bloch_CV_Model::Bloch_CV_Model     ()
     retval = CVodeSetMaxHnilWarns(m_cvode_mem,2);
     if (check_retval(&retval, "CVodeSetMaxHnilWarns", 1)) exit(-1);
 
-}
-
-/**********************************************************/
-// kernel to assign to NVector values from the solution vector
-__global__ void SolutionToNVectorKernel (realtype* sol, realtype* p_y, int N_spins_stream) {
-    int spin_idx = blockIdx.x * blockDim.x + threadIdx.x;
-    if (spin_idx < N_spins_stream) {
-        p_y[3*spin_idx+0] = sol[3*spin_idx+AMPL];
-        p_y[3*spin_idx+1] = fmod(sol[3*spin_idx+PHASE], (realtype)(TWOPI));
-        p_y[3*spin_idx+2] = sol[3*spin_idx+ZC];
-    }
 }
 
 /**********************************************************/

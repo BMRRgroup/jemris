@@ -97,7 +97,7 @@ class Model {
 	 */
 	static void saveEvolution (long index, bool close_files) ;
 
-#else
+#elif MODEL_ON_GPU == 1
 	void SolveGPU();
     static void saveEvolutionGPU (long index, bool close_files, cudaStream_t stream) ;
 #endif
