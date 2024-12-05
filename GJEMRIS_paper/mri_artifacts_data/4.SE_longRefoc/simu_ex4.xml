@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<simulate name="JEMRIS">
+   <sample name="Brain" uri="./brain_slice90_2.h5"/>
+   <RXcoilarray uri="./uniform.xml"/>
+   <TXcoilarray uri="./uniform.xml"/>
+   <parameter ConcomitantFields="0" EvolutionPrefix="evol" EvolutionSteps="0" RandomNoise="0"/>
+   <sequence name="SE_forEx4" uri="./SE_forEx4.xml"/>
+   <model name="Bloch" type="CVODE"/>
+</simulate>
