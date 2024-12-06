@@ -2,7 +2,9 @@ import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.ticker import MultipleLocator
 import h5py 
+import pandas as pd
 import os
+import seaborn as sns
 
 font = 12 # 14
 plt.rcParams['axes.linewidth'] = 3
@@ -145,14 +147,16 @@ def normalize_all(data_list, ref_data):
     max_val = np.max(np.abs(ref_data))
     return [data / max_val for data in data_list]
     
-def compute_and_print_errors(gpu_data, mpi_data, mpi_data_2, label):
-    rmse = error_GPUvsMPI(gpu_data, mpi_data, mpi_data_2)
-    nrmse_gpu_mpi = nrmse(gpu_data, mpi_data)
-    nrmse_mpi_mpi2 = nrmse(mpi_data_2, mpi_data)
-    print(f"Relative {label}-space RMSE:\t{rmse:.10f}")
-    print(f"NRMSE (GPU vs MPI): {nrmse_gpu_mpi:.6f},\tNRMSE (MPI vs MPI2): {nrmse_mpi_mpi2:.6f}")
+def compute_and_print_errors(gpu_dp_data, gpu_sp_data, mpi_data, label):
+    # rmse = error_GPUvsMPI(gpu_data, mpi_data)
+    nrmse_gpu_dp_mpi = nrmse(gpu_dp_data, mpi_data)
+    nrmse_gpu_sp_mpi = nrmse(gpu_sp_data, mpi_data)
+    # print(f"Relative {label}-space RMSE:\t{rmse:.10f}")
+    print(f"NRMSE (GPU_DP vs MPI): {nrmse_gpu_dp_mpi:.6f}")
+    print(f"NRMSE (GPU_SP vs MPI): {nrmse_gpu_sp_mpi:.6f}")
+    return (nrmse_gpu_dp_mpi, nrmse_gpu_sp_mpi)
 
-    # Helper function to add colorbars to plots
+# Helper function to add colorbars to plots
 def add_colorbar(im, fmt=None):
     cbar = plt.colorbar(im)
     if fmt:
@@ -270,7 +274,7 @@ def simulation_visualization(magn, phase_order=[], Nkx=128, Nky=11, save=False,\
     return magn_tr, recon_im
 
 
-def compare_ksp_img(gpu_file, mpi_file, mpi_file_2, k_order, folder='./', 
+def compare_ksp_img(gpu_dp_file, gpu_sp_file, mpi_file, k_order, folder='./', 
                           n_channels=1, Nx=64, Ny=64, Nkx=64, Nky=64,
                           plot=False, save=False, save_figname=''):
     """
@@ -304,8 +308,8 @@ def compare_ksp_img(gpu_file, mpi_file, mpi_file_2, k_order, folder='./',
             - img_FS_mpi : Normalized image data from mpi_file.
     """
     # Step 1: Load and compare signals
-    time_vectors, magn_vectors = compare_signals(gpu_file, mpi_file, mpi_file_2, folder, Nkx*Nky, n_channels, plot=plot)
-    files = [gpu_file, mpi_file, mpi_file_2]
+    time_vectors, magn_vectors = compare_signals(gpu_dp_file, gpu_sp_file, mpi_file, folder, Nkx*Nky, n_channels, plot=plot)
+    files = [gpu_dp_file, gpu_sp_file, mpi_file]
     n_files = len(files)
 
     ksp_data_cxy = []
@@ -340,10 +344,10 @@ def compare_ksp_img(gpu_file, mpi_file, mpi_file_2, k_order, folder='./',
     ksp_data_cxy = normalize_all(ksp_data_cxy, ksp_data_cxy[1])
     img_data_cxy = normalize_all(img_data_cxy, img_data_cxy[1])
 
-    compute_and_print_errors(ksp_data_cxy[0], ksp_data_cxy[1], ksp_data_cxy[2], "K")
-    compute_and_print_errors(img_data_cxy[0], img_data_cxy[1], img_data_cxy[2], "Image")
-
-    return ksp_data_cxy, img_data_cxy
+    rmses = compute_and_print_errors(ksp_data_cxy[0], ksp_data_cxy[1], ksp_data_cxy[2], "K")
+    # _ = compute_and_print_errors(img_data_cxy[0], img_data_cxy[1], img_data_cxy[2], "Image")
+            
+    return ksp_data_cxy, img_data_cxy, rmses
 
 import numpy as np
 import matplotlib.pyplot as plt
@@ -542,3 +546,99 @@ def process_liver_data(file_fullname, Nkx, Nky, Nk_lines, N_echoes, species, N_f
         )
 
     return magn_all_species, fat_amplitudes, time, ksp_sum, ims_sum
+
+
+def performance_plot(df, x_col, y_col, y_err_col=None, hue_col='mode', annotate_col=None, 
+                  log_x=False, log_y=False, ytick_format=None, title='', xlabel='', ylabel='', save_path=None):
+    """
+    Generate a scatter plot with optional annotations and error bars.
+
+    Args:
+        df (pd.DataFrame): The dataframe containing the data.
+        x_col (str): Column name for x-axis values.
+        y_col (str): Column name for y-axis values.
+        y_err_col (str, optional): Column name for y-variance values (used for error bars). Default is None.
+        hue_col (str, optional): Column name for grouping/hue. Default is 'mode'.
+        annotate_col (str, optional): Column name for annotations. Default is None.
+        log_x (bool, optional): Whether to use log scale on x-axis. Default is False.
+        log_y (bool, optional): Whether to use log scale on y-axis. Default is False.
+        ytick_format (list, optional): Custom formatting for y-ticks. Default is None.
+        title (str, optional): Title of the plot. Default is ''.
+        xlabel (str, optional): Label for x-axis. Default is ''.
+        ylabel (str, optional): Label for y-axis. Default is ''.
+        save_path (str, optional): Path to save the plot as an image. Default is None.
+    """
+    # Create scatter plot
+    ax = sns.lmplot(x=x_col, y=y_col, data=df, fit_reg=False, hue=hue_col, legend=False, 
+                    height=5, aspect=1.4, scatter_kws={"s": 60})
+
+    # Add error bars if provided
+    if y_err_col:
+        plt.errorbar(
+            x=df[x_col], y=df[y_col], yerr=np.sqrt(df[y_err_col]), 
+            fmt='none', ecolor='gray', elinewidth=1, capsize=3, alpha=0.7
+        )
+
+    # Add annotations if provided
+    if annotate_col:
+        for line in range(df.shape[0]):
+            plt.text(
+                df[x_col].iloc[line] + 0.2, df[y_col].iloc[line], df[annotate_col].iloc[line],
+                horizontalalignment='left', size='medium', color='black', weight='semibold'
+            )
+
+    # Adjust axis scales
+    if log_x:
+        plt.xscale('log')
+    if log_y:
+        plt.yscale('log')
+
+    # Set axis labels and title
+    plt.xlabel(xlabel)
+    plt.ylabel(ylabel)
+    plt.title(title, fontsize=13)
+
+    # Adjust x-ticks
+    plt.xticks(df[x_col])
+    ax.set_xticklabels(df[x_col])
+
+    # Custom y-tick formatting
+    if ytick_format:
+        y_ticks = ytick_format.get('values', plt.yticks()[0])
+        plt.yticks(y_ticks)
+        if ytick_format.get('labels'):
+            ax.set_yticklabels(ytick_format['labels'])
+
+    # Show legend
+    plt.legend()
+
+    # Layout adjustments
+    plt.tight_layout()
+
+    # Save plot if save_path is provided
+    if save_path:
+        plt.savefig(save_path, dpi=300)
+        print(f"Plot saved to: {save_path}")
+
+    # Show the plot
+    plt.show()
+
+def load_benchmark_data(file_path):
+    """
+    Load benchmarking data from a CSV file.
+
+    Args:
+        file_path (str): Path to the CSV file.
+
+    Returns:
+        pd.DataFrame: A pandas DataFrame containing the benchmarking data.
+    """
+    try:
+        data = pd.read_csv(file_path)
+        print("Data successfully loaded.")
+        print(data.head())  # Display the first few rows for verification
+        return data
+    except FileNotFoundError:
+        print(f"Error: The file '{file_path}' was not found.")
+    except Exception as e:
+        print(f"An error occurred while loading the file: {e}")
