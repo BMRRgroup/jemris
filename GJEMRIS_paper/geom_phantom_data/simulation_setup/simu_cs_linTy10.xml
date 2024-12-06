@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<simulate name="JEMRIS">
+   <sample name="Ellipsoids" uri="./ellips_SS_5.h5" MotionTrajectory="./cs_linTy10_half2nd.dat"/>
+   <RXcoilarray uri="./coil_sag_FOV60_SS_.xml"/>
+   <TXcoilarray uri="./uniform.xml"/>
+   <parameter ConcomitantFields="0" EvolutionPrefix="evol" EvolutionSteps="0" RandomNoise="0"/>
+   <sequence name="T1w_cs2_SS_center_tra" uri="./20210501_cs2_T1w_DRIVE_64_tra_.xml"/>
+   <model name="Bloch" type="CVODE"/>
+</simulate>
