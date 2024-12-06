@@ -1,0 +1,13 @@
+Test,Number of spins,Reception,pjemris_v2.9,gjemris_v4.2_DP,gjemris_v4.2_SP,MPI-setup
+ellips_mRx_2k,2250,4-channel,32,8,8,MrCalc with MPI 24
+ellips_mRx_2k,2250,4-channel,37,13,9,MrCalc with MPI 24
+ellips_mRx_2k,2250,4-channel,35,15,7,MrCalc with MPI 24
+ellips_mRx_22k,22500,4-channel,307,61,14,MrCalc with MPI 24
+ellips_mRx_22k,22500,4-channel,370,51,18,MrCalc with MPI 24
+ellips_mRx_22k,22500,4-channel,380,48,16,MrCalc with MPI 24
+ellips_mRx_220k,225000,4-channel,3040,617,324,MrCalc with MPI 24
+ellips_mRx_220k,225000,4-channel,3660,503,302,MrCalc with MPI 24
+ellips_mRx_220k,225000,4-channel,2999,420,322,MrCalc with MPI 24
+ellips_mRx_2m,2250000,4-channel,30367,10381,7312,MrCalc with MPI 24
+ellips_mRx_2m,2250000,4-channel,30472,13288,7021,MrCalc with MPI 24
+ellips_mRx_2m,2250000,4-channel,30360,14875,7669,MrCalc with MPI 24
