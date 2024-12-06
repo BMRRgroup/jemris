@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<CoilArray>
+   <EXTERNALCOIL Dim="2" Extent="60" Filename="./Sag_FOV60_SS_r1.3_coil_1.h5" Name="C1" Points="60"/>
+   <EXTERNALCOIL Dim="2" Extent="60" Filename="./Sag_FOV60_SS_r1.3_coil_2.h5" Name="C2" Points="60"/>
+   <EXTERNALCOIL Dim="2" Extent="60" Filename="./Sag_FOV60_SS_r1.3_coil_3.h5" Name="C3" Points="60"/>
+   <EXTERNALCOIL Dim="2" Extent="60" Filename="./Sag_FOV60_SS_r1.3_coil_4.h5" Name="C4" Points="60"/>
+</CoilArray>
