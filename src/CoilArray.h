@@ -211,8 +211,7 @@ class CoilArray  {
      * @brief receive on all streams async-ly and write signals to repository at once
                 each stream is assigned to a receive channel in multi-channel
      */
-    void ReceiveGPU (long lADC, int iter_stream, int SpinOffset, 
-        int StreamSize, cudaStream_t* streams);
+    void ReceiveGPU (long lADC, cudaStream_t* streams);
 
     /**
      * @brief write bulk magnetization into signal repository

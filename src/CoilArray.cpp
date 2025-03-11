@@ -440,36 +440,23 @@ int CoilArray::ReadRestartSignal(){
 
 /**********************************************************/
 // AN-2022: receive spins on all streams asynchroniously and write the signals at once from all streams
-void CoilArray::ReceiveGPU (long lADC, int iter_stream, int SpinOffset, 
-	int StreamSize, cudaStream_t* streams) {
+void CoilArray::ReceiveGPU(long lADC, cudaStream_t* streams) 
+{
+    int total = GetSize();
+    for (int i = 0; i < total; i++) {
+        int streamIndex = i % NoOfStreams;
 
-	int ch;
-	for (int i=0; i<(GetSize()/NoOfStreams+1); i++) {
-		for (int istream=0; istream<NoOfStreams; istream++) {
-			ch = i * NoOfStreams + istream;
-			if ( ch < GetSize() ) {
-				m_coils[ch]->ReceiveGPU (lADC, streams[istream]);
-			} else {
-				ch--;
-				break;
-			}		
-		}
-	}
-	cudaStreamSynchronize(streams[(ch) % NoOfStreams]);
-	gpuErrchk(cudaGetLastError());
+        m_coils[i]->ReceiveGPU(lADC, streams[streamIndex]);
 
-	for (int i=0; i<(GetSize()/NoOfStreams+1); i++) {
-		for (int istream=0; istream<NoOfStreams; istream++) {
-			ch = i * NoOfStreams + istream;
-			if ( ch < GetSize() ) {
-				m_coils[ch]->WriteSignal(lADC);
-			} else {
-				break;
-			}	
-		}
-	}	
+		// wait for h_sol to be ready
+        cudaStreamSynchronize(streams[streamIndex]);
+
+        m_coils[i]->WriteSignal(lADC);
+    }
+	// cudaDeviceSynchronize();
 
 }
+
 
 /**********************************************************/
 // AN-2022: helpers to propagate the action to all coil channels
@@ -497,18 +484,11 @@ void CoilArray::WriteSignal (long lADC) {
 
 void CoilArray::InitCoilSensGPU (size_t* sample_dims, double* sample_values, cudaStream_t* streams) {
 
-	int ch;
-	for (int i=0; i<(GetSize()/NoOfStreams+1); i++) {
-		for (int istream=0; istream<NoOfStreams; istream++) {
-			ch = i * NoOfStreams + istream;
-			if ( ch < GetSize() ) {
-				// async-ion is a bit useful for m_interpolate=1
-				m_coils[i]->InitCoilSensGPU(sample_dims, sample_values, streams[i]);
-			} else {
-				ch--;
-				break;
-			}		
-		}
+    int total = GetSize();
+    for (int i = 0; i < total; i++) {
+        int streamIndex = i % NoOfStreams;
+		// async-ion is a bit useful for m_interpolate=1
+		m_coils[i]->InitCoilSensGPU(sample_dims, sample_values, streams[i]);
 	}
 	gpuErrchk(cudaGetLastError());
 			

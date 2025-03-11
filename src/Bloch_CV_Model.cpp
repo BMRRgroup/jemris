@@ -450,7 +450,7 @@ inline static int blochGPU (realtype rt, N_Vector y, N_Vector y_dot, void *pWorl
                                         pW->NonLinGradField_GPU, realtype(pW->GMAXoverB0),
                                         pW->GetNoOfSpinProps(), pW->TotalSpinNumber,
                                         N_spins_stream);
-    gpuErrchk(cudaGetLastError());                                    
+    // gpuErrchk(cudaGetLastError());                                    
     return(0);
 }
 

@@ -473,6 +473,7 @@ void Coil::ReceiveGPU (long lADC, cudaStream_t stream) {
 		pW->TotalSpinNumber, sum_op, init, stream);
 	// copy the computed signal to the host
 	cudaMemcpyAsync (h_sol, d_sol, sizeof(double3), cudaMemcpyDeviceToHost, stream);
+	gpuErrchk(cudaGetLastError());
 }	
 
 /**********************************************************/

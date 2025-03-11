@@ -450,11 +450,11 @@ inline void Model::UpdateProcessCounterGPU (const long lADC) {
 		progressbar(progr);	
 	}
 
-	if (progr % 10 == 0) {
-		cudaMemGetInfo(&free_mem_bytes, &total_mem_bytes);
-		printf("Occupied GPU memory [bytes]\t %d / %d ", 
-			(total_mem_bytes - free_mem_bytes), total_mem_bytes);
-	}	
+	// if (progr % 10 == 0) {
+	// 	cudaMemGetInfo(&free_mem_bytes, &total_mem_bytes);
+	// 	printf("Occupied GPU memory [bytes]\t %d / %d ", 
+	// 		(total_mem_bytes - free_mem_bytes), total_mem_bytes);
+	// }	
 }
 
 /**************************************************/
@@ -498,7 +498,7 @@ void Model::SolveGPU() {
 	
 	// check for nonLinGrads and allocate GPU memory if needed
 	if (m_world->has_nonLinGrad) {
-		gpuErrchk(cudaMalloc ((void**)&(m_world->NonLinGradField_GPU), m_world->TotalSpinNumber*sizeof(realtype)));
+		gpuErrchk(cudaMalloc((void**)&(m_world->NonLinGradField_GPU), m_world->TotalSpinNumber*sizeof(realtype)));
 		m_world->NonLinGradField = new realtype[m_world->TotalSpinNumber];
 	}
 	
@@ -513,8 +513,6 @@ void Model::SolveGPU() {
 				(m_world->GetNoOfCompartments()), streamSize[0]*istream, streamSize[istream]);
 	}
 
-	// wait, as solution will be needed in RunSeq
-	cudaStreamSynchronize(streams[0]);
 	cudaMemcpyAsync(&m_accuracy_factor, &(m_world->Values[3]), sizeof(realtype), cudaMemcpyDeviceToHost, streams[0]);
 
 	if (!(m_world->m_rx_ideal)) {
@@ -525,8 +523,9 @@ void Model::SolveGPU() {
 	}
 
 	if (m_world->dynamic && (!m_world->m_rx_ideal)) 
-		m_rx_coil_array->BufferDynCoils();
+		m_rx_coil_array->BufferDynCoils(); 
 
+	cudaDeviceSynchronize();
 	// Solve while running down the sequence tree
 	RunSequenceTreeGPU(dTime, lIndex, m_concat_sequence);
 	
@@ -652,10 +651,9 @@ void Model::RunSequenceTreeGPU (double& dTimeShift, long& lIndexShift, Module* m
 
 				m_world->time  += dTimeShift;
 				// wait for the bloch solution before receive
-				cudaStreamSynchronize(streams[iter_stream]);	
+				cudaDeviceSynchronize();
 				gpuErrchk(cudaGetLastError());
-				m_rx_coil_array->ReceiveGPU((lIndexShift++), iter_stream, SpinOffset, 
-					m_world->TotalSpinNumber, streams);
+				m_rx_coil_array->ReceiveGPU((lIndexShift++), streams);
 				(iadc)++;
 			}
 			//write time evolution
@@ -663,7 +661,6 @@ void Model::RunSequenceTreeGPU (double& dTimeShift, long& lIndexShift, Module* m
 			    int n = lIndexShift / m_world->saveEvolStepSize  - 1;
 			    int N = m_world->TotalADCNumber / m_world->saveEvolStepSize ;
 			    m_world->saveEvolFunPtrGPU( lIndexShift, n+1 == N, streams[0]);
-				gpuErrchk(cudaGetLastError());
 			}
 		
 		}
@@ -672,7 +669,6 @@ void Model::RunSequenceTreeGPU (double& dTimeShift, long& lIndexShift, Module* m
 		if (m_do_dump_progress)
 			UpdateProcessCounterGPU(lIndexShift);
 		// dump restart info:
-		// DumpRestartInfo(lSpin);
 
 		//update eddy currents: sets the linger times for following atoms
 		m_world->pAtom->UpdateEddyCurrents();

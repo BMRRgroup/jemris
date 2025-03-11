@@ -178,10 +178,10 @@ class World {
      * @param b NEEDS documenting
      */
     void      (*saveEvolFunPtr)(long l, bool b)  ;
+    void InitNonLinGradField (); 
 
 // AN-2022
 #ifdef MODEL_ON_GPU
-    void InitNonLinGradField (); 
     /**
 	 * @brief Pointer to the evolution saving function for GPU computations
 	 */

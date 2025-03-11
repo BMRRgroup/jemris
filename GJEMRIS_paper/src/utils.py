@@ -65,7 +65,7 @@ def compare_signals( file_gpu_dp, file_gpu_sp, file_mpi_dp,  folder='./speed_ben
     if plot:
         for ch in range(n_channels):
             fig, axs = plt.subplots(1, 3, figsize=(11, 4.5))
-            plt.suptitle('Signals, channel {ch+1}', y=0.95)
+            plt.suptitle(f'Signals, channel {ch+1}', y=0.95)
             # set the spacing between subplots
             plt.subplots_adjust(hspace=0.1, wspace=0.05, top=0.82)
             for i in range(3):
