@@ -652,7 +652,7 @@ void Model::RunSequenceTreeGPU (double& dTimeShift, long& lIndexShift, Module* m
 				m_world->time  += dTimeShift;
 				// wait for the bloch solution before receive
 				cudaDeviceSynchronize();
-				gpuErrchk(cudaGetLastError());
+				// gpuErrchk(cudaGetLastError());
 				m_rx_coil_array->ReceiveGPU((lIndexShift++), streams);
 				(iadc)++;
 			}

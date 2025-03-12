@@ -65,7 +65,7 @@ class EddyPulse;
      * @brief global params for all GPU kernels
      */
     static const int NoOfStreams = 5; // fixed number of streams to use
-    static const int block = 512; // threads per block
+    static const int block = 256; // threads per block
 
     /**
      * @brief CUDA error checking fucntion

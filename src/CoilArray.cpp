@@ -453,7 +453,7 @@ void CoilArray::ReceiveGPU(long lADC, cudaStream_t* streams)
 
         m_coils[i]->WriteSignal(lADC);
     }
-	// cudaDeviceSynchronize();
+	cudaDeviceSynchronize();
 
 }
 
