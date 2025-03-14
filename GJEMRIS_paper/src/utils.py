@@ -582,10 +582,12 @@ def performance_plot(df, x_col, y_col, y_err_col=None, hue_col='mode', annotate_
     # Add annotations if provided
     if annotate_col:
         for line in range(df.shape[0]):
-            plt.text(
-                df[x_col].iloc[line] + 0.2, df[y_col].iloc[line], df[annotate_col].iloc[line],
-                horizontalalignment='left', size='medium', color='black', weight='semibold'
-            )
+            annotation_value = df[annotate_col].iloc[line]
+            if isinstance(annotation_value, str):  # Only annotate non-empty strings
+                plt.text(
+                    df[x_col].iloc[line] + 0.2, df[y_col].iloc[line], f"x{annotation_value}",
+                    horizontalalignment='left', size='medium', color='black', weight='semibold'
+                )
 
     # Adjust axis scales
     if log_x:

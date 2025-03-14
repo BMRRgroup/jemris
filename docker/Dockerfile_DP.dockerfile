@@ -28,7 +28,8 @@ RUN apt-get install -y libhdf5-serial-dev
 ARG cuda_version
 ARG cuda_version_minor
 ARG cuda_version_apt=${cuda_version}-${cuda_version_minor}
-RUN apt-get install -y cuda-nvcc-${cuda_version_apt} libcusolver-dev-${cuda_version_apt} nvidia-cuda-toolkit
+RUN apt-get install -y cuda-nvcc-${cuda_version_apt} libcusolver-dev-${cuda_version_apt} 
+# nvidia-cuda-toolkit
 RUN apt-get install -y libcusparse-dev-${cuda_version_apt} libcublas-dev-${cuda_version_apt} libcurand-dev-${cuda_version_apt} cuda-nsight-systems-${cuda_version_apt}
 ENV LD_LIBRARY_PATH="$LD_LIBRARY_PATH:/usr/local/include/"
 ENV PATH="/usr/local/cuda-${CUDA_VERSION_MAJOR}.${CUDA_VERSION_MINOR}/bin:$PATH"
