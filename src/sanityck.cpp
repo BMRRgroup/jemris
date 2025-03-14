@@ -602,7 +602,7 @@ int main(int argc, char *argv[])
 	seq.push_back("sli_sel.xml");
 	seq.push_back("var_dur.xml");
 	seq.push_back("extpulses.xml");
-	seq.push_back("epi_modular.xml");
+	// seq.push_back("epi_modular.xml");
 	seq.push_back("trapezoid.xml");
 	// seq.push_back("eddycurrents.xml");
 

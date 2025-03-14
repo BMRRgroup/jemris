@@ -40,7 +40,7 @@
 #ifdef HAVE_CVODE_CVODE_DIAG_H
     #include "cvode/cvode_diag.h"         /* prototypes for CVODE diagonal solver (required since CVODE 5.x) */
 #endif
-#include <sundials/sundials_context.h>
+// #include <sundials/sundials_context.h>
 
 // AN-2022 includes fro CVode_5.7
 #include <sundials/sundials_types.h>   /* definition of type double */

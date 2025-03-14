@@ -252,9 +252,9 @@ static int bloch (realtype t, N_Vector y, N_Vector ydot, void *pWorld) {
 
 /**********************************************************/
 Bloch_McConnell_CV_Model::Bloch_McConnell_CV_Model     () {
-    int comm=1;
-    SUNContext sunctx;
-    SUNContext_Create( &comm, &sunctx );
+    // int comm=1;
+    // SUNContext sunctx;
+    // SUNContext_Create( &comm, &sunctx );
 
     m_world->solverSettings = new bmnvec;
    /* for (int i=0;i<OPT_SIZE;i++) {m_iopt[i]=0; m_ropt[i]=0.0;}
@@ -262,7 +262,7 @@ Bloch_McConnell_CV_Model::Bloch_McConnell_CV_Model     () {
     m_ropt[HMAX]   = 10000.0;// the maximum stepsize in msec of the integrator*/
     m_reltol       = RTOL;
 
-    m_cvode_mem = CVodeCreate(CV_ADAMS, sunctx);
+    m_cvode_mem = CVodeCreate(CV_ADAMS);
 
     // cvode allocate memory.
     // do CVodeMalloc with dummy values y0,abstol once here;
@@ -274,9 +274,9 @@ Bloch_McConnell_CV_Model::Bloch_McConnell_CV_Model     () {
     int pools = m_world->GetNoOfCompartments();
 
     N_Vector y0,abstol;
-    y0		= N_VNew_Serial(NEQ*pools, sunctx);
-    abstol	= N_VNew_Serial(NEQ*pools, sunctx);
-    ((bmnvec*) (m_world->solverSettings))->abstol = N_VNew_Serial(pools*NEQ, sunctx);
+    y0		= N_VNew_Serial(NEQ*pools);
+    abstol	= N_VNew_Serial(NEQ*pools);
+    ((bmnvec*) (m_world->solverSettings))->abstol = N_VNew_Serial(pools*NEQ);
 
     for(int i = 0; i< pools*NEQ; i+=NEQ){
     	NV_Ith_S(y0,AMPL+i) = 0.0; NV_Ith_S(y0,PHASE+i) = 0.0; NV_Ith_S(y0,ZC+i) = 0.0;
@@ -326,14 +326,14 @@ if	(CVDiag(m_cvode_mem) != CV_SUCCESS){
    	// maximum number of warnings t+h = t (if number negative -> no warnings are issued )
    	CVodeSetMaxHnilWarns(m_cvode_mem,2);
 
-   SUNContext_Free(&sunctx);
+//    SUNContext_Free(&sunctx);
 }
 
 /**********************************************************/
 void Bloch_McConnell_CV_Model::InitSolver    () {
-    int comm=1;
-    SUNContext sunctx;
-    SUNContext_Create( &comm, &sunctx );
+    // int comm=1;
+    // SUNContext sunctx;
+    // SUNContext_Create( &comm, &sunctx );
 
 	m_world     = World::instance();
 	
@@ -354,7 +354,7 @@ void Bloch_McConnell_CV_Model::InitSolver    () {
 	
 	m_world->auxiliary = (void*) (&m_bmaux);
 	
-    ((bmnvec*) (m_world->solverSettings))->y = N_VNew_Serial(NEQ*m_ncomp, sunctx);
+    ((bmnvec*) (m_world->solverSettings))->y = N_VNew_Serial(NEQ*m_ncomp);
 	
     // loop over pools, stepsize NEQ
     for ( int i = 0; i < m_ncomp*NEQ; i += NEQ ){
@@ -365,7 +365,7 @@ void Bloch_McConnell_CV_Model::InitSolver    () {
 
     }
 	
-    ((bmnvec*) (m_world->solverSettings))->abstol = N_VNew_Serial(NEQ*m_ncomp, sunctx);
+    ((bmnvec*) (m_world->solverSettings))->abstol = N_VNew_Serial(NEQ*m_ncomp);
 	
     // loop over pools, stepsize NEQ
     for ( int i = 0, pool=0; i< m_ncomp*NEQ; i+=NEQ, pool++ ){
@@ -399,7 +399,7 @@ void Bloch_McConnell_CV_Model::InitSolver    () {
     	exit (-1);
     }
 	
-   SUNContext_Free(&sunctx);
+//    SUNContext_Free(&sunctx);
 }
 
 /**********************************************************/
