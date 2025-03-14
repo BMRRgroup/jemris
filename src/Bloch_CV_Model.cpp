@@ -192,13 +192,8 @@ Bloch_CV_Model::Bloch_CV_Model     () : m_tpoint(0) {
     m_ropt[HMAX]   = 100000.0;// the maximum stepsize in msec of the integrator*/
     m_reltol       = RTOL;
 
-<<<<<<< HEAD
      // create cvode memory pointer; no mallocs done yet.
     m_cvode_mem = CVodeCreate (CV_ADAMS, sunctx);
-=======
-    // create cvode memory pointer; no mallocs done yet.
-    m_cvode_mem = CVodeCreate (CV_ADAMS);
->>>>>>> 817c226 (minor bugs)
 
 
     // cvode allocate memory.
@@ -250,7 +245,7 @@ Bloch_CV_Model::Bloch_CV_Model     () : m_tpoint(0) {
     int                 mxiter  = 20;
     int                 maa     = 0;           // acceleration vectors
     double              damping = RCONST(1.0); 
-    NLS = SUNNonlinSol_FixedPoint(y0, maa); // y0 - a NVECTOR template for
+    NLS = SUNNonlinSol_FixedPoint(y0, maa, sunctx); // y0 - a NVECTOR template for
 	// cloning vectors needed within the solver
     if((void *)NLS == NULL) {
 	cout << "SUNNonlinSol_FixedPoint initialization failed!" << endl; exit(-1);
@@ -486,8 +481,10 @@ static int check_retval(void *returnvalue, const char *funcname, int opt)
 
 /**********************************************************/
 // Constructor of the GPU model
-Bloch_CV_Model::Bloch_CV_Model     ()  
-{
+Bloch_CV_Model::Bloch_CV_Model     ()  {
+    int comm=1;
+    SUNContext sunctx;
+    SUNContext_Create( &comm, &sunctx );
 
     // create nvec for the model init
     m_world->solverSettings = new nvec;
@@ -524,10 +521,10 @@ Bloch_CV_Model::Bloch_CV_Model     ()
     // cvode allocate memory.
     // do CVodeMalloc with dummy values y0,abstol once here;
     // CVodeReInit can later be used
-    m_cvode_mem = CVodeCreate (CV_ADAMS);
+    m_cvode_mem = CVodeCreate (CV_ADAMS, sunctx);
 
     // Allocate thevector for ODEs
-    y0 = N_VNew_Cuda((NEQ*N_spins_total));  
+    y0 = N_VNew_Cuda((NEQ*N_spins_total), sunctx);  
     if(check_retval((void*)y0, "N_VNew_Cuda", 0)) exit(-1);
 
     /* Use a non-default cuda stream for streaming and reduction kernel execution */
@@ -550,7 +547,7 @@ Bloch_CV_Model::Bloch_CV_Model     ()
     int                mxiter  = 20;
     int                maa     = 0;           // acceleration vectors
     realtype           damping = RCONST(1.0); 
-    NLS = SUNNonlinSol_FixedPoint(y0, maa); // y0 - a NVECTOR template for
+    NLS = SUNNonlinSol_FixedPoint(y0, maa, sunctx); // y0 - a NVECTOR template for
                                             // cloning vectors needed within the solver
 
     if (check_retval(NLS, "SUNNonlinSol initialization", 0)) exit(-1);
@@ -572,6 +569,8 @@ Bloch_CV_Model::Bloch_CV_Model     ()
     retval = CVodeSetMaxHnilWarns(m_cvode_mem,2);
     if (check_retval(&retval, "CVodeSetMaxHnilWarns", 1)) exit(-1);
 
+    SUNContext_Free(&sunctx);
+
 }
 
 /**********************************************************/
@@ -579,9 +578,12 @@ Bloch_CV_Model::Bloch_CV_Model     ()
 // is kept with running on a CUDA stream options
 // ! the only function which allocates GPU memory while running through sequence loop, necessary to avoid errors
 void Bloch_CV_Model::InitSolverGPU (cudaStream_t stream, bool alloc_nvector_gpu) {
+    int comm=1;
+    SUNContext sunctx;
+    SUNContext_Create( &comm, &sunctx );
 
     if (alloc_nvector_gpu) {
-        (((nvec*) (m_world->solverSettings))->y) = N_VNew_Cuda((NEQ*m_world->TotalSpinNumber));
+        (((nvec*) (m_world->solverSettings))->y) = N_VNew_Cuda((NEQ*m_world->TotalSpinNumber), sunctx);
         if (check_retval((void*)((nvec*)(m_world->solverSettings))->y, "N_VNew_Cuda", 0)) exit(-1);
     }
 
@@ -603,6 +605,7 @@ void Bloch_CV_Model::InitSolverGPU (cudaStream_t stream, bool alloc_nvector_gpu)
     if ( CVodeReInit(m_cvode_mem,0,(((nvec*) (m_world->solverSettings))->y)) != CV_SUCCESS ) {
         cout << "CVodeReInit failed! aborting..." << endl; exit(-1);
     }
+    SUNContext_Free(&sunctx);
 
 }
 

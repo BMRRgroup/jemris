@@ -51,9 +51,27 @@ RUN  tar -xzvf v1.13.2.tar.gz; cd ./ismrmrd-1.13.2/; mkdir build; cd build; cmak
 
 ## CVODE 
 ARG sundials_precision
-RUN wget https://github.com/LLNL/sundials/releases/download/v5.7.0/cvode-5.7.0.tar.gz
-RUN tar -xzvf cvode-5.7.0.tar.gz
-RUN cd cvode-5.7.0; mkdir build; cd build; cmake -DSUNDIALS_PRECISION=${sundials_precision} -DENABLE_CUDA=ON -DEXAMPLES_ENABLE_CUDA=ON -DENABLE_MPI=ON -DENABLE_OPENMP=ON -DPTHREAD_ENABLE=ON ../; make; make install
+RUN wget https://github.com/LLNL/sundials/releases/download/v6.4.1/sundials-6.4.1.tar.gz \
+    && tar -xzvf sundials-6.4.1.tar.gz \
+    && cd sundials-6.4.1 \
+    && mkdir build && cd build \
+    && cmake -DCMAKE_INSTALL_PREFIX=/usr/local \
+             -DSUNDIALS_PRECISION=double \
+             -DENABLE_CUDA=ON \
+             -DEXAMPLES_ENABLE_CUDA=ON \
+             -DENABLE_MPI=ON \
+             -DENABLE_OPENMP=ON \
+             -DPTHREAD_ENABLE=ON \
+             -DBUILD_SHARED_LIBS=ON \
+             -DEXAMPLES_ENABLE=ON \
+             -DSUNDIALS_BUILD_WITH_PROFILING=ON \
+             -DENABLE_CUSPARSE=OFF \
+             ../ \
+    && make -j$(nproc) \
+    && make install \
+    && rm -rf /sundials-6.4.1.tar.gz /sundials-6.4.1
+
+
 
 ## GPU-JEMRIS newest version - needs autorization
 # RUN git clone https://gitlab.lrz.de/BMRR/tools/gjemris.git
