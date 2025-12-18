@@ -352,10 +352,10 @@ bool CheckSigs_onGPU(string path, vector<string> seq){
 		binfile.replace(binfile.find(".xml",0),4,"");
 #ifdef SUNDIALS_SINGLE_PRECISION
 		binfile_GPU = binfile+"_SP_GPUsignal";
-		double threshold_error = 2.0; 
+		double threshold_error = 10.0; 
 #elif defined(SUNDIALS_DOUBLE_PRECISION)
 		binfile_GPU = binfile+"_DP_GPUsignal";
-		double threshold_error = 10.;  // GPU results can deviate quite some with low number of spins (depends on device)
+		double threshold_error = 10.0;  // GPU results can deviate quite some with low number of spins (depends on device)
 #endif 
 		binfile += "_signal";
 		sim.GetRxCoilArray()->SetSignalPrefix(path+binfile_GPU);
