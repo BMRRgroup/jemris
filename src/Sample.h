@@ -45,7 +45,7 @@ using std::ofstream;
 using namespace std;
 XERCES_CPP_NAMESPACE_USE
 
-#ifdef MODEL_ON_GPU // AN-2022
+#if MODEL_ON_GPU == 1 // AN-2022
 #include <cuda_runtime.h>
 #include <curand.h>
 #include <curand_kernel.h>
@@ -545,7 +545,7 @@ class Sample {
 
 	virtual void CropEnumerate ();
 
-#ifdef MODEL_ON_GPU // AN-2022
+#if MODEL_ON_GPU == 1 // AN-2022
 	/**
      * @brief Pin sample values memory for async transfer on GPU in GetValuesNdeltaB_2GPU,
 	 * 		  sample values are converted to single precision if needed.
@@ -600,7 +600,7 @@ class Sample {
 	int             m_no_spin_compartments;
 
 // AN-2022
-#ifdef MODEL_ON_GPU
+#if MODEL_ON_GPU == 1
 	realtype* 		sample_arr;
 	curandState_t* 	randStates;
 	realtype*    	d_m_res_posRND;

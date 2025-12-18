@@ -75,7 +75,7 @@ public:
      */
     map<string, Coil*>*  getList() {return &m_Clonables;}
 
-#ifdef MODEL_ON_GPU
+#if MODEL_ON_GPU == 1
    /**
      * @brief Get the name of the coil type
      *

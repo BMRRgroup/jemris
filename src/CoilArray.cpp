@@ -70,7 +70,7 @@ unsigned int CoilArray::Populate (string* coil_name/*=nullptr*/) {
 
 	RunTree(topnode, this, &CoilArray::CreateCoil);
 
-#ifdef MODEL_ON_GPU
+#if MODEL_ON_GPU == 1
 	// AN-2022: empirically found how to extract coil name
 	*coil_name = this->m_cpf->GetName(topnode->getFirstChild()->getNextSibling());
 #endif
@@ -436,7 +436,7 @@ int CoilArray::ReadRestartSignal(){
 	return (0);
 }
 
-#ifdef MODEL_ON_GPU
+#if MODEL_ON_GPU == 1
 
 /**********************************************************/
 // AN-2022: receive spins on all streams asynchroniously and write the signals at once from all streams

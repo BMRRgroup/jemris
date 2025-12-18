@@ -29,7 +29,7 @@
 #include "DynamicVariables.h"
 
 // AN-2022 
-#ifdef MODEL_ON_GPU
+#if MODEL_ON_GPU == 1
 #include <cub/cub.cuh>
 #include "CudaKernels.cuh"
 #endif	// AN-2022***
@@ -39,7 +39,7 @@
 Coil::~Coil() {
 	
 	if (m_signal   != NULL) delete    m_signal;
-#ifdef MODEL_ON_GPU
+#if MODEL_ON_GPU == 1
 	cudaFreeHost(h_sol);
 	cudaFree(d_sol);
 	cudaFree(d_sol_vec);
@@ -312,7 +312,7 @@ bool Coil::Prepare  (const PrepareMode mode) {
 }
 
 // AN-2022: functions for the GPU model
-#ifdef MODEL_ON_GPU 
+#if MODEL_ON_GPU == 1 
 /**********************************************************/
 // AN-2022: prepare the coil maps for tranfer to GPU
 void Coil::GetMapsAll (double* sens_magn_all, double* sens_phase_all, double* sample_values, 

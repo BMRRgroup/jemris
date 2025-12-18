@@ -1,13 +1,15 @@
 # AN-2022: GPU-JEMRIS -----------------------------------------------------------------------
 if (MODEL_ON_GPU)
   if(NOT DEFINED CMAKE_CUDA_ARCHITECTURES)
-    # AN - tested on 61 and 75
-    set(CMAKE_CUDA_ARCHITECTURES 50 52 53 60 61 62 70 75 86) # 71 
-  # if earlier CUDA architecture, include: 20 30 35 37 50 52 53 60 61 62 70 71 75
+    # AN - tested on 61 and 75 and 86
+    set(CMAKE_CUDA_ARCHITECTURES 50 52 53 60 61 62 70 75 86) 
   endif()
 
+  add_compile_definitions(MODEL_ON_GPU=1)
   set (CMAKE_CXX_FLAGS_INIT "-Wno-dev")
   project (jemris LANGUAGES C CXX CUDA)
+else()
+  add_compile_definitions(MODEL_ON_GPU=0)
 endif()
 ### AN-2022
 

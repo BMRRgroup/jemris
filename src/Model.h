@@ -38,10 +38,10 @@
 #include "ContainerSequence.h"
 
 // AN-2022
-#ifdef MODEL_ON_GPU
+#if MODEL_ON_GPU == 1
 #include "cuda_runtime.h"
-#include <sundials/sundials_types.h>   /* definition of type double */
 #endif // AN-2022***
+#include <sundials/sundials_types.h>   /* definition of type double */
 using namespace std;
 
 //class declarations
@@ -63,7 +63,7 @@ class Model {
 	 * @brief Default Destructor
 	 */
 	virtual ~Model() {	
-#ifdef MODEL_ON_GPU	
+#if MODEL_ON_GPU == 1	
 		cudaFree(dM);
 #endif
 	};
@@ -88,7 +88,7 @@ class Model {
 	 */
 	void Solve();
 	
-#ifndef MODEL_ON_GPU // AN-2022
+#if MODEL_ON_GPU == 0 // AN-2022
 	/**
 	 * @brief Save time evolution to disk.
 	 *
@@ -107,7 +107,7 @@ class Model {
 
  protected:
 
-#ifndef MODEL_ON_GPU
+#if MODEL_ON_GPU == 0
 
 	/**
 	 * @brief Initialise solver.
@@ -152,7 +152,7 @@ class Model {
 #endif
 	// AN-2022***
 
-#ifdef MODEL_ON_GPU		// AN-2022
+#if MODEL_ON_GPU == 1		// AN-2022
 	realtype* 		dM;  				/** @brief Back-up for the solution on GPU */
 	cudaStream_t*	streams;			/** @brief Non-default streams for asynchorous run on GPU  */
 	int				streamSize[NoOfStreams];			/** @brief If the ensemble split between streams, the size of a chunk */
@@ -170,7 +170,7 @@ class Model {
  private:
 
     bool            m_aux; //for debugging
-#ifndef MODEL_ON_GPU	// AN-2022
+#if MODEL_ON_GPU == 0	// AN-2022
     /**
      * updates process counter file
      */

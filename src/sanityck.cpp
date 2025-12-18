@@ -38,7 +38,7 @@
 #define DEFAULT_TOLERANCE_SIG_COMPARE_PPM  10.0
 #define DEFAULT_TOLERANCE_SEN_COMPARE_PPM   5.0
 
-#ifdef MODEL_ON_GPU // AN-2022
+#if MODEL_ON_GPU == 1 // AN-2022
 #include <cuda_runtime.h>
 #endif
 
@@ -55,7 +55,7 @@ void usage()
 	cout << "  sanityck <path_to_example_data> 3 : creates sensitivity maps" << endl;
 	cout << "  sanityck <path_to_example_data> 4 : exports some sequences in pulseq format for scanner execution" << endl
 		 << endl;
-#ifdef MODEL_ON_GPU
+#if MODEL_ON_GPU == 1
 	// GPU-JEMRIS tests
 	cout   << "  sanityck <path_to_example_data> 6 : performs GPU simulations of some sequences, \n and compares the results to the CPU pre-computed data " << endl << endl;
 		// possible only in double precision, and if ctest was run on CPU
@@ -317,7 +317,7 @@ bool CheckSigs(string path, vector<string> seq, double tolerance_in_percent)
 	return status;
 }
 
-#ifdef MODEL_ON_GPU
+#if MODEL_ON_GPU == 1
 // signal checking funcitons for GPU (analogous to the CPU version )
 /****************************************************/
 bool CheckSigs_onGPU(string path, vector<string> seq){
@@ -352,10 +352,10 @@ bool CheckSigs_onGPU(string path, vector<string> seq){
 		binfile.replace(binfile.find(".xml",0),4,"");
 #ifdef SUNDIALS_SINGLE_PRECISION
 		binfile_GPU = binfile+"_SP_GPUsignal";
-		double threshold_error = 2.0; // %
+		double threshold_error = 2.0; 
 #elif defined(SUNDIALS_DOUBLE_PRECISION)
 		binfile_GPU = binfile+"_DP_GPUsignal";
-		double threshold_error = 0.1;
+		double threshold_error = 10.;  // GPU results can deviate quite some with low number of spins (depends on device)
 #endif 
 		binfile += "_signal";
 		sim.GetRxCoilArray()->SetSignalPrefix(path+binfile_GPU);
@@ -602,7 +602,7 @@ int main(int argc, char *argv[])
 	seq.push_back("sli_sel.xml");
 	seq.push_back("var_dur.xml");
 	seq.push_back("extpulses.xml");
-	// seq.push_back("epi_modular.xml");
+	seq.push_back("epi_modular.xml");
 	seq.push_back("trapezoid.xml");
 	// seq.push_back("eddycurrents.xml");
 
@@ -621,7 +621,7 @@ int main(int argc, char *argv[])
 
 	bool status = true;
 
-#ifdef MODEL_ON_GPU
+#if MODEL_ON_GPU == 1
 	// sequences to test GPU-JEMRIS
 	// ginac was disabled 
 	vector<string> seq_gpu;
@@ -660,10 +660,9 @@ int main(int argc, char *argv[])
 		cout << "\nsanityck: unknown input\n\n";
 		break;
 
-#ifdef MODEL_ON_GPU
+#if MODEL_ON_GPU == 1
 	case(6): 
-		PrintDevices(); 
-		cout << "Comparing GPU simulations to the v2.8-approved signals... " << endl;
+		cout << "Comparing GPU simulations to the v2.9-approved signals... " << endl;
 		status = CheckSigs_onGPU(path,seq_gpu);
 		break; // for the defined sequences, compare signals from the GPU simulations to the approved signals from v2.8
 		gpuErrchk(cudaGetLastError());

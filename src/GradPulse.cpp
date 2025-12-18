@@ -95,7 +95,7 @@ bool GradPulse::PrepareNLGfield  (PrepareMode mode) {
 		if (GetParent() != NULL ) ((AtomicSequence*) GetParent())->SetNonLinGrad(m_non_lin_grad);
 
 // AN-2022
-#ifdef MODEL_ON_GPU 
+#if MODEL_ON_GPU == 1
 		if (m_non_lin_grad) {
 			World::instance()->has_nonLinGrad = true;
 		}
@@ -271,7 +271,7 @@ void GradPulse::SetNonLinGradField(double const time){
 
 	if (m_hide) { return ; }
 
-#ifndef MODEL_ON_GPU // AN-2022
+#if MODEL_ON_GPU == 0// AN-2022
 	//evaluate NLG field and add it to the World
 	World::instance()->NonLinGradField += GetAttribute("NLG_field")->EvalCompiledNLGExpression
 			( World::instance()->Values[0], World::instance()->Values[1], World::instance()->Values[2], GetGradient(time) );

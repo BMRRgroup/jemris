@@ -30,7 +30,7 @@
 #include "DynamicVariables.h"
 #include "Trajectory.h"
 #include "MultiPoolSample.h"
-#ifndef MODEL_ON_GPU
+#if MODEL_ON_GPU == 0 
 #include "Bloch_McConnell_CV_Model.h"
 #endif
 //MODIF
@@ -148,7 +148,7 @@ void Simulator::SetRxCoilArray      (string frxarray) {
 		m_rx_coil_array->SetSignalPrefix(sp);
 
 	m_rx_coil_array->Initialize(frxarray);
-#ifndef MODEL_ON_GPU
+#if MODEL_ON_GPU == 0 
 	m_rx_coil_array->Populate();
 #else
 	std::string coil_type;
@@ -170,7 +170,7 @@ void Simulator::SetTxCoilArray      (string ftxarray) {
 	m_tx_coil_array = new CoilArray();
 	m_tx_coil_array ->setMode(1);
 	m_tx_coil_array ->Initialize(ftxarray);
-#ifndef MODEL_ON_GPU
+#if MODEL_ON_GPU == 0 
 	m_tx_coil_array ->Populate();
 #else
 	std::string coil_type;
@@ -193,7 +193,7 @@ void Simulator::SetModel          (std::string fmodel) {
 		fmodel = GetAttr(GetElem("model"), "type");
 
 	if (fmodel == "BM_CVODE") {
-#ifndef MODEL_ON_GPU
+#if MODEL_ON_GPU == 0 
 		m_model = new Bloch_McConnell_CV_Model ();
 #else
 		printf("McConnell model is not available for GJEMRIS");
@@ -246,7 +246,7 @@ void Simulator::SetParameter      () {
 
 	// load trajectories for dynamic variables:
 	DynamicVariables *dynVar = DynamicVariables::instance();
-#ifdef MODEL_ON_GPU
+#if MODEL_ON_GPU == 1
 		// AN-2022
 	m_world->dynamic = false;
 #endif
@@ -259,7 +259,7 @@ void Simulator::SetParameter      () {
             dynVar->m_Flow->FlowLoop(atof(t_loop.c_str()),atol(n_loop.c_str()));
 		dynVar->m_Flow->LoadFile(Flow);//,m_world->TotalSpinNumber);
 		//cout<<m_world->m_myRank<<" CALLED FLOW LOADING"<<endl;
-#ifdef MODEL_ON_GPU
+#if MODEL_ON_GPU == 1
 		// AN-2022
 		m_world->dynamic = true;
 		printf("Sorry, Flow is not implemented in GJEMRIS"); exit(-1);
@@ -271,7 +271,7 @@ void Simulator::SetParameter      () {
     string     Respiration= GetAttr(GetElem("sample"), "RespirationTrajectory");
     if (!Respiration.empty()) {
         dynVar->m_Respiration->LoadFile(Respiration);
-#ifdef MODEL_ON_GPU
+#if MODEL_ON_GPU == 1
 		// AN-2022
 		m_world->dynamic = true;
 		printf("Sorry, Respiration motion trajectory is not implemented in GJEMRIS"); exit(-1);
@@ -284,7 +284,7 @@ void Simulator::SetParameter      () {
 	string     Motion = GetAttr(GetElem("sample"), "MotionTrajectory");
 	if (!Motion.empty()) {
 		dynVar->m_Motion->LoadFile(Motion);
-#ifdef MODEL_ON_GPU
+#if MODEL_ON_GPU == 1
 		// AN-2022
 		m_world->dynamic = true;
 #endif
@@ -293,7 +293,7 @@ void Simulator::SetParameter      () {
 	string     T2prime = GetAttr(GetElem("sample"), "T2primeTrajectory");
 	if (!T2prime.empty()) {
 		dynVar->m_T2prime->LoadFile(T2prime);
-#ifdef MODEL_ON_GPU
+#if MODEL_ON_GPU == 1
 		// AN-2022
 		m_world->dynamic = true;
 #endif
@@ -302,7 +302,7 @@ void Simulator::SetParameter      () {
 	string     T1 = GetAttr(GetElem("sample"), "R1Trajectory");
 	if (!T1.empty()) {
 		dynVar->m_R1->LoadFile(T1);
-#ifdef MODEL_ON_GPU
+#if MODEL_ON_GPU == 1
 		// AN-2022
 		m_world->dynamic = true;
 #endif
@@ -311,7 +311,7 @@ void Simulator::SetParameter      () {
 	string     T2 = GetAttr(GetElem("sample"), "R2Trajectory");
 	if (!T2.empty()) {
 		dynVar->m_R2->LoadFile(T2);
-#ifdef MODEL_ON_GPU
+#if MODEL_ON_GPU == 1
 		// AN-2022
 		m_world->dynamic = true;
 #endif
@@ -320,7 +320,7 @@ void Simulator::SetParameter      () {
 	string     M0 = GetAttr(GetElem("sample"), "M0Trajectory");
 	if (!M0.empty()) {
 		dynVar->m_M0->LoadFile(M0);
-#ifdef MODEL_ON_GPU
+#if MODEL_ON_GPU == 1
 		// AN-2022
 		m_world->dynamic = true;
 #endif
@@ -342,7 +342,7 @@ void Simulator::SetParameter      () {
 	string     diffusion = GetAttr(GetElem("sample"), "Diffusionfile");
 	if (!diffusion.empty()) {
 		dynVar->m_Diffusion->LoadFile(diffusion);
-#ifdef MODEL_ON_GPU
+#if MODEL_ON_GPU == 1
 		m_world->dynamic = true;
 		printf("Sorry, diffusion is not implemented in GJEMRIS"); exit(-1);
 #endif

@@ -32,7 +32,7 @@
 #include "Signal.h"
 #include "CoilPrototypeFactory.h"
 
-#ifdef MODEL_ON_GPU
+#if MODEL_ON_GPU == 1
 // AN-2022
 #include <cuda_runtime.h>
 #endif
@@ -189,7 +189,7 @@ class CoilArray  {
      */
     int ReadRestartSignal();
 
-#ifdef MODEL_ON_GPU   
+#if MODEL_ON_GPU == 1   
 // AN-2022
 
     /**

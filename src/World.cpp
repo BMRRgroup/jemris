@@ -56,7 +56,7 @@ World* World::instance() {
         m_instance->total_time          =  0.0;
         m_instance->phase               = -1.0;
 
-#ifndef MODEL_ON_GPU // AN-2022
+#if MODEL_ON_GPU == 0 // AN-2022
         m_instance->saveEvolFunPtr      = &Model::saveEvolution;
         m_instance->deltaB              =  0.0;
         m_instance->NonLinGradField     =  0.0;
@@ -127,7 +127,7 @@ void World::SetNoOfSpinProps (int n) {
 	if ( m_noofspincompartments > 1 ){
 
 // AN-2022
-#ifndef MODEL_ON_GPU
+#if MODEL_ON_GPU == 0
 		int m_ncoprops =  (n - 4) / m_noofspincompartments;
 		m_noofspinprops = n;
 		Values = new double [n*m_ncoprops];
@@ -143,7 +143,7 @@ void World::SetNoOfSpinProps (int n) {
 		m_noofspinprops = n;
 
 // AN-2022
-#ifndef MODEL_ON_GPU
+#if MODEL_ON_GPU == 0
 		Values = new double [n];
 		for ( int i = 0; i < n; i++ )
 			Values [i] = 0.0;
@@ -173,7 +173,7 @@ void World::SetNoOfCompartments (int n) {
 	m_noofspincompartments = n;
 
 // AN-2022
-#ifndef MODEL_ON_GPU
+#if MODEL_ON_GPU == 0
     if (solution.size() < 3*n) {
     	solution.clear();
         solution.resize(m_noofspincompartments * 3);
@@ -189,7 +189,7 @@ World::~World () {
 	m_instance=0; 
 
 // AN-2022
-#ifndef MODEL_ON_GPU	
+#if MODEL_ON_GPU == 0	
 	if (Values)
 		delete Values; 
 #else
@@ -211,7 +211,7 @@ World::~World () {
 // AN-2022: initialize the nonlinear gradient fields 
 void World::InitNonLinGradField() {
 
-#ifndef MODEL_ON_GPU
+#if MODEL_ON_GPU == 0
     World::instance()->NonLinGradField = 0.0;
 #else
     for (int i=0; i<TotalSpinNumber; i++) {
@@ -220,7 +220,7 @@ void World::InitNonLinGradField() {
 #endif
 }
 
-#ifdef MODEL_ON_GPU // AN-2022
+#if MODEL_ON_GPU == 1 // AN-2022
 /***********************************************************/
 // AN-2022: helper function to convert a double precision array into a single precision array
 realtype* double2floatArray(double* arr, unsigned n) {

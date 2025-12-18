@@ -32,7 +32,7 @@
 #include "Declarations.h"
 #include "NDData.h"
 
-#ifdef MODEL_ON_GPU // AN-2022
+#if MODEL_ON_GPU == 1 // AN-2022
 #include <cuda_runtime.h>
 
 /** AN-2022
@@ -184,7 +184,7 @@ class Coil : public Prototype {
 
 	double GetNorm (){return m_norm;};
 
-#ifdef MODEL_ON_GPU 
+#if MODEL_ON_GPU == 1 
 // AN-2022
     /** 
     * @brief sum operator of the two double3 variables
@@ -274,7 +274,7 @@ class Coil : public Prototype {
     double Unwrap(double diff,bool magnitude); /**< helper function to check for phase wraps in interpolation of phase maps. */
 
 // AN-2022: members needed for the GPU computations
-#ifdef MODEL_ON_GPU
+#if MODEL_ON_GPU == 1
     double3*        h_sol;          /**< temporary storage for the signal on host   */
     double3*        d_sol;          /**< temporary storage for the signal on device   */
     double3*        d_sol_vec;      /**< temporary storage for the solution on device   */

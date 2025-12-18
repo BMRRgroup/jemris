@@ -42,7 +42,7 @@ AN-2022: includes components for the numerical model on GPU
 #include "time.h"
 #include "Trajectory.h"
 
-#ifdef MODEL_ON_GPU
+#if MODEL_ON_GPU == 1
 #include "CudaKernels.cuh"
 #endif
 
@@ -82,7 +82,7 @@ inline static void progressbar (int percent) {
 /**************************************************/
 void Model::Solve() {
 
-#ifdef MODEL_ON_GPU	// AN-2022
+#if MODEL_ON_GPU == 1	// AN-2022
 	SolveGPU();
 #else
     //problem size
@@ -144,7 +144,7 @@ void Model::Solve() {
 
 }
 
-#ifndef MODEL_ON_GPU
+#if MODEL_ON_GPU == 0
 /**************************************************/
 void Model::RunSequenceTree (double& dTimeShift, long& lIndexShift, Module* module) {
 
@@ -592,7 +592,7 @@ void Model::RunSequenceTreeGPU (double& dTimeShift, long& lIndexShift, Module* m
 		double next_tStop = -1.;
 		bool found_next = false;
 
-		InitSolverGPU(streams[0], false);
+		InitSolverGPU(streams[0], true);
 		
 		int iter_stream = 0;
 		while (iter_stream < NoOfStreams) {

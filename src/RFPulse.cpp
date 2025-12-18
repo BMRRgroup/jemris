@@ -164,7 +164,7 @@ void RFPulse::GetValue (double * dAllVal, double const time)  {
 	double magn  = 1.0;
 	double phase = 0.0;
 
-#ifndef MODEL_ON_GPU
+#if MODEL_ON_GPU == 0
 	if (m_coil_array != NULL) {
 
 		Coil* coil=m_coil_array->GetCoil(m_channel);

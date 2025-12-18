@@ -40,7 +40,7 @@
 #ifdef HAVE_CVODE_CVODE_DIAG_H
     #include "cvode/cvode_diag.h"         /* prototypes for CVODE diagonal solver (required since CVODE 5.x) */
 #endif
-// #include <sundials/sundials_context.h>
+#include <sundials/sundials_context.h>
 
 // AN-2022 includes fro CVode_5.7
 #include <sundials/sundials_types.h>   /* definition of type double */
@@ -67,7 +67,7 @@
 struct nvec {
     N_Vector y;      /**< CVODE vector */
     N_Vector abstol; /**< CVODE vector */
-#ifdef MODEL_ON_GPU
+#if MODEL_ON_GPU == 1
     // AN-2022: use scalar abstol which is the minimum along the 3 dimensions
     realtype m_abstol;
 #endif
@@ -89,13 +89,12 @@ class Bloch_CV_Model : public Model {
      * @brief Default destructor
      */
     virtual ~Bloch_CV_Model      () {
-        CVodeFree(&m_cvode_mem);
-        // AN-2022
-        SUNNonlinSolFree(NLS);
-#ifdef MODEL_ON_GPU
+        CVodeFree(&m_cvode_mem);        
+#if MODEL_ON_GPU == 1
         for (int istream=0; istream<NoOfStreams; istream++) {
             cudaStreamDestroy(streams[istream]);
         }
+        SUNContext_Free(&m_sunctx);
 #endif    
         // AN-2022***
     };
@@ -107,7 +106,7 @@ class Bloch_CV_Model : public Model {
 
 
  protected:
-#ifndef MODEL_ON_GPU
+#if MODEL_ON_GPU == 0
     /**
      * @brief Initialise solver
      *
@@ -150,15 +149,15 @@ class Bloch_CV_Model : public Model {
 
     // CVODE related
     void*  m_cvode_mem;	 /**< @brief pointer to cvode malloc */
-#ifndef MODEL_ON_GPU
+#if MODEL_ON_GPU == 0
     double m_tpoint;	 /**< @brief current time point */
     double m_reltol;	 /**< @brief relative error tolerance for CVODE */
 #else
     // AN-2022: changed to realtype to allow single-precision
     realtype m_tpoint;	 /**< @brief current time point */
     realtype m_reltol;	 /**< @brief relative error tolerance for CVODE */
+    SUNContext m_sunctx;
 #endif
-    SUNNonlinearSolver NLS; // nonlinear solver instead of the Newton's method used in jemris-2-8-3
 };
 
 #endif /*BLOCH_CV_MODEL_H_*/

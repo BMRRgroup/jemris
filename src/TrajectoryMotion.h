@@ -47,7 +47,7 @@ public:
 	virtual void LoadFile(string filename) ;
 
 // AN-2022
-#ifdef MODEL_ON_GPU
+#if MODEL_ON_GPU == 1
 	void GetValueDerived_AllSpins(double time);
 private:
 	void GetPosition_Realtype(double time, realtype &trans_x, realtype &trans_y, realtype &trans_z, realtype &rot_x, realtype &rot_y, realtype &rot_z);

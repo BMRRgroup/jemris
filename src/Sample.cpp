@@ -32,7 +32,7 @@
 #include "BinaryContext.h"
 
 #include <math.h>
-#ifdef MODEL_ON_GPU
+#if MODEL_ON_GPU == 1
 #include "CudaKernels.cuh"
 #endif
 
@@ -324,7 +324,7 @@ size_t  Sample::GetSize   ()     const  {
 	return m_ensemble.NSpins();
 }
 
-#ifndef MODEL_ON_GPU
+#if MODEL_ON_GPU == 0
 /**********************************************************/
 void Sample::GetValues (const size_t l, double* val) {
 
@@ -626,7 +626,7 @@ void Sample::CopyHelper (double* out) {
 }
 
 // AN-2022
-#ifdef MODEL_ON_GPU
+#if MODEL_ON_GPU == 1
 /**********************************************************/
 // pin the memory of sample values for Async copy to GPU
 void Sample::PinEnsembleGPU() {
@@ -646,7 +646,7 @@ void Sample::PinEnsembleGPU() {
 	m_res_rt = &m_res[0];
 #endif
 	// register the sample property values to allow asyncMemcpy
-	gpuErrchk( cudaHostRegister(&sample_arr[0], m_ensemble.NSpins()*m_ensemble.NProps()*sizeof(realtype),cudaHostRegisterDefault)); 
+	gpuErrchk( cudaHostRegister(&sample_arr[0], m_ensemble.NSpins()*m_ensemble.NProps()*sizeof(realtype), cudaHostRegisterDefault) ); 
 
 	// copy res and pos_rnd to GPU 
 	gpuErrchk( cudaMalloc((void**)&(d_m_res_posRND), 4*sizeof(realtype)) ); 

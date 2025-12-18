@@ -32,7 +32,7 @@
 #include "SequenceTree.h"
 #include "ConcatSequence.h"
 
-#ifdef MODEL_ON_GPU
+#if MODEL_ON_GPU == 1
 // AN-2022: added CUDA kernels
 #include "TrajectoryKernels.cuh"
 #endif
@@ -162,7 +162,7 @@ void TrajectoryMotion::GetValueDerived(double time,double *values){
     // order of transformations: first rotate around x, then y, then z-axis; afterwards translate;
     // rotation around point m_rot_origin
 
-#ifdef MODEL_ON_GPU // AN-2022
+#if MODEL_ON_GPU == 1 // AN-2022
 	GetValueDerived_AllSpins(time);
 #else
 
@@ -220,7 +220,7 @@ void TrajectoryMotion::GetValueDerived(double time,double *values){
 }
 
 
-#ifdef MODEL_ON_GPU
+#if MODEL_ON_GPU == 1
 /***********************************************************/
 void TrajectoryMotion::GetPosition_Realtype(double time, realtype &trans_x, realtype &trans_y, realtype &trans_z, realtype &rot_x, realtype &rot_y, realtype &rot_z) {
 

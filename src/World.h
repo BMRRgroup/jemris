@@ -38,7 +38,7 @@
 #include     <map>
 
 // AN-2022: define the World class on GPU
-#ifdef MODEL_ON_GPU
+#if MODEL_ON_GPU == 1
 #include <cuda_runtime.h>
 #include <cvode/cvode.h>
 #endif
@@ -55,7 +55,7 @@ class EddyPulse;
 //! Singleton with information about the simulation of the current spin
 
 // AN-2022
-#ifdef MODEL_ON_GPU 
+#if MODEL_ON_GPU == 1 
     /**
      * @brief convert the double array into a single array
      */
@@ -64,7 +64,7 @@ class EddyPulse;
     /**
      * @brief global params for all GPU kernels
      */
-    static const int NoOfStreams = 5; // fixed number of streams to use
+    static const int NoOfStreams = 1; // fixed number of streams to use
     static const int block = 256; // threads per block
 
     /**
@@ -181,7 +181,7 @@ class World {
     void InitNonLinGradField (); 
 
 // AN-2022
-#ifdef MODEL_ON_GPU
+#if MODEL_ON_GPU == 1
     /**
 	 * @brief Pointer to the evolution saving function for GPU computations
 	 */
@@ -209,7 +209,7 @@ class World {
     double            RandNoise;            /**< @brief percentage of random noise added to the signal */
     double            GMAXoverB0;           /**< @brief Constant for the concomitant field term */
 
-#ifndef MODEL_ON_GPU // AN-2022
+#if MODEL_ON_GPU == 0 // AN-2022
 	// members for a particular spin
     long              SpinNumber;		    /**< @brief Number of the current spin*/
     double*           Values;               /**< @brief Values of the current spin (position and physical parameters) */
