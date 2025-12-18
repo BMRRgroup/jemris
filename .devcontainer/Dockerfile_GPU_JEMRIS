@@ -1,0 +1,80 @@
+FROM mcr.microsoft.com/devcontainers/cpp:1-ubuntu-24.04
+
+ARG REINSTALL_CMAKE_VERSION_FROM_SOURCE="3.22.2"
+
+# AN-2025
+ARG CUDA_VERSION="12-8"          # e.g. 12-8, 12-6, ...
+ARG SUNDIALS_PRECISION="double"  # single or double
+
+# Optionally install the cmake for vcpkg
+COPY ./reinstall-cmake.sh /tmp/
+
+RUN if [ "${REINSTALL_CMAKE_VERSION_FROM_SOURCE}" != "none" ]; then \
+    chmod +x /tmp/reinstall-cmake.sh && /tmp/reinstall-cmake.sh ${REINSTALL_CMAKE_VERSION_FROM_SOURCE}; \
+    fi \
+    && rm -f /tmp/reinstall-cmake.sh
+
+# [Optional] Uncomment this section to install additional vcpkg ports.
+# RUN su vscode -c "${VCPKG_ROOT}/vcpkg install <your-port-name-here>"
+
+RUN apt-get update && export DEBIAN_FRONTEND=noninteractive \
+    && apt-get -y install --no-install-recommends \
+        libxerces-c-dev \
+        libginac-dev \
+        ginac-tools \
+        libginac-dev \
+        libginac11 \
+        libhdf5-dev \
+        libismrmrd-dev \
+        mpi-default-bin \
+        libboost-all-dev
+
+# Install CUDA repo + toolkit and CUDA libraries
+RUN wget https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2404/x86_64/cuda-keyring_1.1-1_all.deb \
+    && dpkg -i cuda-keyring_1.1-1_all.deb \
+    && apt-get update \
+    && apt-get install -y \
+        cuda-toolkit-${CUDA_VERSION} \
+        cuda-nvcc-${CUDA_VERSION} \
+        libcusolver-dev-${CUDA_VERSION} \
+        libcusparse-dev-${CUDA_VERSION} \
+        libcublas-dev-${CUDA_VERSION} \
+        libcurand-dev-${CUDA_VERSION} 
+
+ENV PATH=/usr/local/cuda/bin:${PATH}
+ENV LD_LIBRARY_PATH=/usr/local/lib:${LD_LIBRARY_PATH}
+
+# build SUNDIALS with CUDA support
+RUN wget https://github.com/LLNL/sundials/releases/download/v6.4.1/sundials-6.4.1.tar.gz \
+    && tar -xzvf sundials-6.4.1.tar.gz \
+    && cd sundials-6.4.1 \
+    && mkdir build && cd build \
+    && cmake -DCMAKE_INSTALL_PREFIX=/usr/local \
+             -DSUNDIALS_PRECISION=${SUNDIALS_PRECISION} \
+             -DENABLE_CUDA=ON \
+             -DEXAMPLES_ENABLE_CUDA=ON \
+             -DENABLE_MPI=ON \
+             -DENABLE_OPENMP=ON \
+             -DPTHREAD_ENABLE=ON \
+             -DBUILD_SHARED_LIBS=ON \
+             -DEXAMPLES_ENABLE=ON \
+             -DSUNDIALS_BUILD_WITH_PROFILING=ON \
+             -DENABLE_CUSPARSE=OFF \
+             ../ \
+    && make -j$(nproc) \
+    && make install \
+    && cd ../../; rm -rf /sundials-6.4.1.tar.gz /sundials-6.4.1
+
+ENV OMPI_ALLOW_RUN_AS_ROOT=1
+ENV OMPI_ALLOW_RUN_AS_ROOT_CONFIRM=1
+ENV OMPI_MCA_rmaps_base_oversubscribe=true
+
+# RUN git clone https://github.com/BMRRgroup/jemris.git /lib/jemris \
+#     && git checkout feat_gjemris_6.4 \
+#     && cd /lib/jemris \
+#     && mkdir build \
+#     && cd build \
+#     && cmake -DMODEL_ON_GPU=1 ../ \
+#     && make -j$(nproc) \
+#     && make install
+
